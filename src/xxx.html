@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinent — Query Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['IBM Plex Mono', 'monospace'],
+                    },
+                    colors: {
+                        canvas: '#ffffff',
+                        surface: '#fafafa',
+                        'surface-hover': '#f5f5f5',
+                        border: '#e5e5e5',
+                        'border-strong': '#d4d4d4',
+                        fg: '#171717',
+                        'fg-muted': '#737373',
+                        accent: '#2563eb',
+                        'accent-hover': '#1d4ed8',
+                        danger: '#dc2626',
+                        success: '#16a34a',
+                    },
+                    fontSize: {
+                        '2xs': '10px',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Base Reset */
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+            background: var(--canvas);
+            color: var(--fg);
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-strong);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--fg-muted);
+        }
+
+        /* Selection */
+        ::selection {
+            background: var(--fg);
+            color: var(--canvas);
+        }
+
+        /* Layout */
+        .app-frame {
+            display: grid;
+            grid-template-rows: 48px 1fr;
+            height: 100vh;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: 280px 1fr 320px;
+            overflow: hidden;
+        }
+
+        /* Utilities */
+        .mono-num {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .key-cap {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 20px;
+            height: 20px;
+            padding: 0 6px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--fg-muted);
+            box-shadow: 0 1px 0 var(--border);
+        }
+
+        /* Components */
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            color: var(--fg-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .nav-item:hover {
+            background: var(--surface-hover);
+            color: var(--fg);
+        }
+
+        .nav-item.active {
+            background: var(--fg);
+            color: var(--canvas);
+        }
+
+        .query-input {
+            width: 100%;
+            border: none;
+            outline: none;
+            font-size: 15px;
+            font-family: 'Inter', sans-serif;
+            background: transparent;
+            color: var(--fg);
+        }
+
+        .query-input::placeholder {
+            color: var(--fg-muted);
+        }
+
+        .data-cell {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .metric-card {
+            padding: 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface);
+        }
+
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .tag-green {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .tag-red {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .tag-blue {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .tag-amber {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        /* Animations */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-in {
+            animation: slideIn 0.2s ease-out forwards;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .workspace {
+                grid-template-columns: 240px 1fr 280px;
+            }
+        }
+
+        @media (max-width: 968px) {
+            .workspace {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar-left,
+            .sidebar-right {
+                display: none;
+            }
+        }
+    </style>
+    <base target="_blank">
+</head>
+
+<body>
+
+    <div class="app-frame">
+        <!-- Top Bar -->
+        <header class="border-b border-border flex items-center justify-between px-4 bg-canvas z-50">
+            <div class="flex items-center gap-6">
+                <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 bg-fg rounded flex items-center justify-center">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+                            <rect x="3" y="6" width="14" height="6" rx="1" />
+                            <rect x="7" y="14" width="14" height="6" rx="1" />
+                        </svg>
+                    </div>
+                    <span class="font-semibold text-sm tracking-tight">Sentinent</span>
+                </div>
+                <nav class="flex items-center gap-1">
+                    <div class="nav-item active">Query</div>
+                    <div class="nav-item">Decisions</div>
+                    <div class="nav-item">Signals</div>
+                    <div class="nav-item">Graph</div>
+                </nav>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2 px-3 py-1.5 bg-surface border border-border rounded-md">
+                    <div class="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></div>
+                    <span class="text-xs font-mono text-fg-muted">System Online</span>
+                </div>
+                <div
+                    class="w-8 h-8 rounded-full bg-surface border border-border flex items-center justify-center text-xs font-semibold cursor-pointer hover:border-fg-muted transition-colors">
+                    JS
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <div class="workspace">
+
+            <!-- Left Sidebar: Context -->
+            <aside class="sidebar-left border-r border-border bg-surface flex flex-col overflow-hidden">
+                <div class="p-3 border-b border-border">
+                    <div class="text-2xs font-mono uppercase tracking-wider text-fg-muted mb-2 font-semibold">Active
+                        Context</div>
+                    <div class="flex items-center gap-2 px-2 py-1.5 bg-canvas border border-border rounded text-sm">
+                        <span class="text-fg-muted">#</span>
+                        <span class="font-medium">Q3-Strategy-Review</span>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-3 space-y-4">
+                    <div>
+                        <div class="text-2xs font-mono uppercase tracking-wider text-fg-muted mb-2 px-1 font-semibold">
+                            Data Sources</div>
+                        <div class="space-y-0.5">
+                            <div
+                                class="flex items-center justify-between px-2 py-1.5 rounded hover:bg-canvas cursor-pointer group">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-1.5 h-1.5 rounded-full bg-success"></div>
+                                    <span class="text-sm">Salesforce</span>
+                                </div>
+                                <span
+                                    class="text-2xs font-mono text-fg-muted opacity-0 group-hover:opacity-100">2.4k</span>
+                            </div>
+                            <div
+                                class="flex items-center justify-between px-2 py-1.5 rounded hover:bg-canvas cursor-pointer group">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-1.5 h-1.5 rounded-full bg-success"></div>
+                                    <span class="text-sm">Intercom</span>
+                                </div>
+                                <span
+                                    class="text-2xs font-mono text-fg-muted opacity-0 group-hover:opacity-100">847</span>
+                            </div>
+                            <div
+                                class="flex items-center justify-between px-2 py-1.5 rounded hover:bg-canvas cursor-pointer group">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-1.5 h-1.5 rounded-full bg-success"></div>
+                                    <span class="text-sm">Amplitude</span>
+                                </div>
+                                <span
+                                    class="text-2xs font-mono text-fg-muted opacity-0 group-hover:opacity-100">12k</span>
+                            </div>
+                            <div
+                                class="flex items-center justify-between px-2 py-1.5 rounded hover:bg-canvas cursor-pointer group">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
+                                    <span class="text-sm">Jira</span>
+                                </div>
+                                <span
+                                    class="text-2xs font-mono text-fg-muted opacity-0 group-hover:opacity-100">Syncing...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-2xs font-mono uppercase tracking-wider text-fg-muted mb-2 px-1 font-semibold">
+                            Recent Queries</div>
+                        <div class="space-y-0.5">
+                            <div
+                                class="px-2 py-1.5 rounded hover:bg-canvas cursor-pointer text-sm text-fg-muted hover:text-fg truncate">
+                                Churn analysis Q2
+                            </div>
+                            <div
+                                class="px-2 py-1.5 rounded hover:bg-canvas cursor-pointer text-sm text-fg-muted hover:text-fg truncate">
+                                API v2 prioritization
+                            </div>
+                            <div
+                                class="px-2 py-1.5 rounded hover:bg-canvas cursor-pointer text-sm text-fg-muted hover:text-fg truncate">
+                                Enterprise feature gaps
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center: Query & Results -->
+            <main class="flex flex-col bg-canvas overflow-hidden">
+                <!-- Query Bar -->
+                <div class="border-b border-border p-4 bg-canvas">
+                    <div class="flex items-center gap-3 max-w-4xl">
+                        <span class="key-cap">/</span>
+                        <input type="text" class="query-input"
+                            placeholder="Ask about churn, feature requests, or strategic direction..." id="mainQuery"
+                            autocomplete="off">
+                        <button
+                            class="px-4 py-2 bg-fg text-canvas text-sm font-medium rounded-md hover:bg-fg/90 transition-colors"
+                            onclick="executeQuery()">
+                            Query
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2 mt-3 max-w-4xl overflow-x-auto pb-1">
+                        <button onclick="setQuery('What should we build next?')"
+                            class="px-3 py-1.5 bg-surface border border-border rounded-md text-xs hover:border-fg-muted transition-colors whitespace-nowrap">
+                            What should we build next?
+                        </button>
+                        <button onclick="setQuery('Why are enterprise customers churning?')"
+                            class="px-3 py-1.5 bg-surface border border-border rounded-md text-xs hover:border-fg-muted transition-colors whitespace-nowrap">
+                            Why are enterprise customers churning?
+                        </button>
+                        <button onclick="setQuery('Analyze Q3 revenue impact')"
+                            class="px-3 py-1.5 bg-surface border border-border rounded-md text-xs hover:border-fg-muted transition-colors whitespace-nowrap">
+                            Analyze Q3 revenue impact
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Results Area -->
+                <div class="flex-1 overflow-y-auto p-6" id="resultsArea">
+
+                    <!-- Empty State -->
+                    <div class="h-full flex flex-col items-center justify-center text-fg-muted" id="emptyState">
+                        <div
+                            class="w-16 h-16 border-2 border-dashed border-border rounded-xl flex items-center justify-center mb-4">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5">
+                                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                        <p class="text-sm">Enter a query to begin analysis</p>
+                        <p class="text-2xs font-mono mt-2 opacity-60">Press <span class="key-cap">/</span> to focus</p>
+                    </div>
+
+                    <!-- Results Content (Hidden by default) -->
+                    <div id="resultsContent" class="hidden space-y-6 max-w-5xl">
+
+                        <!-- Summary Header -->
+                        <div class="animate-in">
+                            <div class="flex items-center gap-3 mb-2">
+                                <h2 class="text-xl font-semibold">Recommendation: Advanced Analytics Dashboard</h2>
+                                <span class="tag tag-green">HIGH CONFIDENCE</span>
+                            </div>
+                            <p class="text-sm text-fg-muted leading-relaxed max-w-3xl">
+                                Analysis of 1,247 signals across Enterprise tier indicates critical demand for
+                                self-serve analytics.
+                                Current workaround involves manual CSV exports costing ~$400k/quarter in support
+                                overhead.
+                            </p>
+                        </div>
+
+                        <!-- Metrics Grid -->
+                        <div class="grid grid-cols-4 gap-4 animate-in" style="animation-delay: 0.05s">
+                            <div class="metric-card">
+                                <div class="text-2xs font-mono uppercase text-fg-muted mb-1">Revenue Impact</div>
+                                <div class="text-2xl font-semibold mono-num text-success">+$1.2M</div>
+                                <div class="text-2xs text-fg-muted mt-1">ARR projection</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="text-2xs font-mono uppercase text-fg-muted mb-1">Request Volume</div>
+                                <div class="text-2xl font-semibold mono-num">847</div>
+                                <div class="text-2xs text-fg-muted mt-1">Last 90 days</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="text-2xs font-mono uppercase text-fg-muted mb-1">Competitor Gap</div>
+                                <div class="text-2xl font-semibold mono-num text-danger">-3mo</div>
+                                <div class="text-2xs text-fg-muted mt-1">Behind Figma</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="text-2xs font-mono uppercase text-fg-muted mb-1">Effort Estimate</div>
+                                <div class="text-2xl font-semibold mono-num">6w</div>
+                                <div class="text-2xs text-fg-muted mt-1">2 engineers</div>
+                            </div>
+                        </div>
+
+                        <!-- Evidence Table -->
+                        <div class="border border-border rounded-lg overflow-hidden animate-in"
+                            style="animation-delay: 0.1s">
+                            <div class="px-4 py-3 border-b border-border bg-surface flex items-center justify-between">
+                                <div class="text-sm font-semibold">Supporting Evidence</div>
+                                <div class="flex items-center gap-2">
+                                    <button class="text-2xs font-mono text-fg-muted hover:text-fg">Export CSV</button>
+                                    <span class="text-fg-muted">|</span>
+                                    <button class="text-2xs font-mono text-fg-muted hover:text-fg">View All</button>
+                                </div>
+                            </div>
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-border bg-surface/50">
+                                        <th
+                                            class="text-left data-cell text-2xs font-mono uppercase text-fg-muted font-semibold">
+                                            Source</th>
+                                        <th
+                                            class="text-left data-cell text-2xs font-mono uppercase text-fg-muted font-semibold">
+                                            Signal</th>
+                                        <th
+                                            class="text-left data-cell text-2xs font-mono uppercase text-fg-muted font-semibold">
+                                            Account</th>
+                                        <th
+                                            class="text-right data-cell text-2xs font-mono uppercase text-fg-muted font-semibold">
+                                            Weight</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="border-b border-border hover:bg-surface/50 cursor-pointer">
+                                        <td class="data-cell"><span class="tag tag-blue">Intercom</span></td>
+                                        <td class="data-cell font-medium">"We need export functionality"</td>
+                                        <td class="data-cell text-fg-muted">Acme Corp</td>
+                                        <td class="data-cell text-right mono-num font-medium">0.94</td>
+                                    </tr>
+                                    <tr class="border-b border-border hover:bg-surface/50 cursor-pointer">
+                                        <td class="data-cell"><span class="tag tag-amber">Salesforce</span></td>
+                                        <td class="data-cell font-medium">Churn risk: manual reporting</td>
+                                        <td class="data-cell text-fg-muted">TechGlobal Inc</td>
+                                        <td class="data-cell text-right mono-num font-medium">0.87</td>
+                                    </tr>
+                                    <tr class="border-b border-border hover:bg-surface/50 cursor-pointer">
+                                        <td class="data-cell"><span class="tag tag-green">Amplitude</span></td>
+                                        <td class="data-cell font-medium">Feature usage: Dashboard (0x)</td>
+                                        <td class="data-cell text-fg-muted">Segment: Enterprise</td>
+                                        <td class="data-cell text-right mono-num font-medium">0.82</td>
+                                    </tr>
+                                    <tr class="hover:bg-surface/50 cursor-pointer">
+                                        <td class="data-cell"><span class="tag tag-red">Gong</span></td>
+                                        <td class="data-cell font-medium">"Competitor has better reporting"</td>
+                                        <td class="data-cell text-fg-muted">DataFlow Ltd</td>
+                                        <td class="data-cell text-right mono-num font-medium">0.79</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Decision Action -->
+                        <div class="flex items-center justify-between p-4 border border-border rounded-lg bg-surface animate-in"
+                            style="animation-delay: 0.15s">
+                            <div>
+                                <div class="text-sm font-semibold mb-1">Generate Decision Object</div>
+                                <div class="text-2xs text-fg-muted">Create formal proposal with tradeoff analysis and
+                                    stakeholder approval chain</div>
+                            </div>
+                            <button
+                                class="px-4 py-2 bg-fg text-canvas text-sm font-medium rounded-md hover:bg-fg/90 transition-colors">
+                                Create #DEC-2024-089
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            </main>
+
+            <!-- Right Sidebar: Details -->
+            <aside class="sidebar-right border-l border-border bg-surface flex flex-col overflow-hidden">
+                <div class="p-3 border-b border-border">
+                    <div class="text-2xs font-mono uppercase tracking-wider text-fg-muted font-semibold">Query Metadata
+                    </div>
+                </div>
+
+                <div class="p-4 space-y-4 overflow-y-auto">
+                    <div>
+                        <div class="text-2xs font-mono uppercase text-fg-muted mb-2">Processing Time</div>
+                        <div class="flex items-center gap-2">
+                            <div class="text-lg font-semibold mono-num">1.24s</div>
+                            <span class="tag tag-green text-2xs">FAST</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-2xs font-mono uppercase text-fg-muted mb-2">Signals Analyzed</div>
+                        <div class="text-lg font-semibold mono-num">12,847</div>
+                        <div class="w-full h-1 bg-border rounded-full mt-2 overflow-hidden">
+                            <div class="h-full bg-fg w-3/4"></div>
+                        </div>
+                        <div class="flex justify-between text-2xs text-fg-muted mt-1">
+                            <span>Relevant: 156</span>
+                            <span>Filtered: 12,691</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-2xs font-mono uppercase text-fg-muted mb-2">Bias Check</div>
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between text-sm">
+                                <span>Recency</span>
+                                <span class="text-success font-medium">PASS</span>
+                            </div>
+                            <div class="flex items-center justify-between text-sm">
+                                <span>Survivorship</span>
+                                <span class="text-success font-medium">PASS</span>
+                            </div>
+                            <div class="flex items-center justify-between text-sm">
+                                <span>Loud Customer</span>
+                                <span class="tag tag-amber text-2xs">FLAGGED</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-border">
+                        <div class="text-2xs font-mono uppercase text-fg-muted mb-2">Related Decisions</div>
+                        <div class="space-y-2">
+                            <div
+                                class="p-2 bg-canvas border border-border rounded text-sm cursor-pointer hover:border-fg-muted transition-colors">
+                                <div class="font-medium">#DEC-2024-056</div>
+                                <div class="text-2xs text-fg-muted mt-0.5">API v2 Prioritization</div>
+                            </div>
+                            <div
+                                class="p-2 bg-canvas border border-border rounded text-sm cursor-pointer hover:border-fg-muted transition-colors">
+                                <div class="font-medium">#DEC-2024-031</div>
+                                <div class="text-2xs text-fg-muted mt-0.5">Enterprise Onboarding</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+        </div>
+    </div>
+
+    <script>
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '/' && document.activeElement.id !== 'mainQuery') {
+                e.preventDefault();
+                document.getElementById('mainQuery').focus();
+            }
+            if (e.key === 'Escape') {
+                document.getElementById('mainQuery').blur();
+            }
+        });
+
+        function setQuery(text) {
+            document.getElementById('mainQuery').value = text;
+            document.getElementById('mainQuery').focus();
+        }
+
+        function executeQuery() {
+            const query = document.getElementById('mainQuery').value;
+            if (!query.trim()) return;
+
+            // Hide empty state, show results
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('resultsContent').classList.remove('hidden');
+
+            // Simulate loading states if needed
+            const results = document.getElementById('resultsContent');
+            results.style.opacity = '0.5';
+            setTimeout(() => {
+                results.style.opacity = '1';
+            }, 200);
+        }
+
+        // Focus input on load
+        window.addEventListener('load', () => {
+            document.getElementById('mainQuery').focus();
+        });
+    </script>
+
+</body>
+
+</html>
