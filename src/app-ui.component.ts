@@ -1,862 +1,1285 @@
-import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { ClerkUserButtonComponent } from 'ngx-clerk';
+
+type ViewKey =
+  | 'agent'
+  | 'chat'
+  | 'inbox'
+  | 'kanban'
+  | 'sprints'
+  | 'automations'
+  | 'integrations'
+  | 'reports'
+  | 'settings';
+
+type RiskLevel = 'high' | 'medium' | 'low';
+type DecisionStatus = 'draft' | 'review' | 'approved' | 'archived';
+type ChatRole = 'user' | 'assistant';
+type ToastType = 'success' | 'error' | 'info';
+type SignalSource = 'Slack' | 'Intercom' | 'Gong' | 'Jira' | 'Notion' | 'Email';
+type ToneMode = 'graphite' | 'signal';
+
+interface DecisionOption {
+  title: string;
+  detail: string;
+}
+
+interface Decision {
+  id: string;
+  title: string;
+  description: string;
+  owner: string;
+  confidence: number;
+  impact: string;
+  status: DecisionStatus;
+  risk: RiskLevel;
+  problem: string;
+  evidence: string;
+  tradeoff: string;
+  options: DecisionOption[];
+}
+
+interface Signal {
+  id: string;
+  source: SignalSource;
+  title: string;
+  summary: string;
+  timestamp: string;
+}
+
+interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  name: string;
+  content: string;
+  timestamp: string;
+  citations?: string[];
+}
+
+interface ChatThread {
+  id: string;
+  title: string;
+  preview: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+}
+
+interface SearchResult {
+  id: string;
+  type: 'Decision' | 'Signal' | 'View';
+  title: string;
+  subtitle: string;
+  targetView: ViewKey;
+  targetId?: string;
+}
+
+interface KpiCard {
+  id: 'active' | 'confidence' | 'time' | 'velocity';
+  label: string;
+  trend: string;
+  direction: 'up' | 'down' | 'neutral';
+}
+
+interface TimelineEvent {
+  id: string;
+  title: string;
+  detail: string;
+  time: string;
+  tone: 'success' | 'warning' | 'info';
+}
+
+interface KanbanCard {
+  id: string;
+  title: string;
+  tag: string;
+  priority: 'High' | 'Medium' | 'Low';
+  assignee: string;
+}
+
+interface KanbanColumn {
+  id: string;
+  title: string;
+  wipLimit: number;
+  items: KanbanCard[];
+}
+
+interface ToggleSetting {
+  title: string;
+  description: string;
+  enabled: boolean;
+}
+
+interface IntegrationSetting {
+  name: string;
+  status: 'Connected' | 'Disconnected';
+  events: string;
+  enabled: boolean;
+}
+
+interface WorkspaceOption {
+  id: string;
+  name: string;
+}
+
+type FeatureResearchStatus = 'queued' | 'running' | 'failed' | 'completed';
+
+interface FeatureResearchProgress {
+  pagesVisited: number;
+  evidenceCount: number;
+  themesCount: number;
+}
+
+interface FeatureResearchRun {
+  runId: string;
+  status: FeatureResearchStatus;
+  step: string;
+  progress: FeatureResearchProgress;
+  error: string | null;
+}
+
+interface FeatureResearchTheme {
+  label: string;
+  count: number;
+  confidence: number;
+}
+
+interface FeatureResearchEvidence {
+  id?: string;
+  source_type: string;
+  source_name: string;
+  url: string;
+  title: string;
+  snippet: string;
+  query: string;
+  captured_at: string;
+}
+
+interface Toast {
+  id: number;
+  message: string;
+  type: ToastType;
+}
 
 @Component({
   selector: 'app-ui',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule, ClerkUserButtonComponent],
+  imports: [CommonModule, FormsModule, RouterLink, ClerkUserButtonComponent],
   templateUrl: './app-ui.component.html',
   styleUrls: ['./app-ui.component.css']
 })
 export class AppUiComponent implements OnInit, OnDestroy {
-  // Theme
+  @ViewChild('globalSearchInput') globalSearchInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('newDecisionModal') newDecisionModal?: ElementRef<HTMLElement>;
+  @ViewChild('newDecisionTitleInput') newDecisionTitleInput?: ElementRef<HTMLInputElement>;
+
   isDarkMode = false;
-
-  // Command Palette
-  showCommandPalette = false;
-  commandQuery = '';
-  commandResults: { icon: string; label: string; action: () => void }[] = [];
-  selectedCommandIndex = 0;
-
-  // Decision Archive
-  archivedDecisions: any[] = [];
-  showArchiveModal = false;
-
-  // Loading state
-  isLoading = true;
+  toneMode: ToneMode = 'graphite';
   isSidebarOpen = false;
-  currentView: 'chat' | 'inbox' | 'kanban' | 'sprints' | 'automations' | 'integrations' | 'reports' | 'settings' = 'inbox';
+  isSidebarHiddenDesktop = false;
+  isWorkspaceMenuOpen = false;
+  showNewDecisionModal = false;
+  showShortcutsModal = false;
+
+  currentView: ViewKey = 'chat';
+
+  searchQuery = '';
+  searchResults: SearchResult[] = [];
+  chatThreadSearch = '';
+
   chatInput = '';
   chatIsLoading = false;
-  chatError = '';
-  llmBaseUrl = 'http://localhost:11434';
-  llmModel = 'llama3.1:8b';
-  systemPrompt =
-    'You are Sentinent, an AI decision assistant. Use the provided context to answer clearly and cite relevant sources when possible.';
+  chatSuggestions = [
+    'Draft API rate limit decision',
+    'Analyze churn risk by segment',
+    'Summarize top buyer objections',
+    'Create exec-ready recommendation'
+  ];
 
-  // Modal state
-  showNewDecisionModal = false;
+  contextDraft: { source: SignalSource; title: string; summary: string } = {
+    source: 'Slack',
+    title: '',
+    summary: ''
+  };
+
+  readonly viewOptions: { key: ViewKey; label: string; shortcut?: string; unread?: boolean }[] = [
+    { key: 'agent', label: 'Agent Feature', shortcut: 'Ctrl+3' },
+    { key: 'chat', label: 'Decision Chat', shortcut: 'Ctrl+1' },
+    { key: 'inbox', label: 'Decision Inbox', shortcut: 'Ctrl+2', unread: true },
+    { key: 'kanban', label: 'Kanban Board' },
+    { key: 'sprints', label: 'Sprints' }
+  ];
+
+  readonly operationsOptions: { key: ViewKey; label: string; disconnected?: boolean }[] = [
+    { key: 'automations', label: 'Automations' },
+    { key: 'integrations', label: 'Integrations', disconnected: true },
+    { key: 'reports', label: 'Reports' },
+    { key: 'settings', label: 'Settings' }
+  ];
+
+  readonly kpiCards: KpiCard[] = [
+    { id: 'active', label: 'Active Decisions', trend: '+3 this week', direction: 'up' },
+    { id: 'confidence', label: 'Avg Confidence', trend: '+2.4%', direction: 'up' },
+    { id: 'time', label: 'Time to Decision', trend: '-6h', direction: 'up' },
+    { id: 'velocity', label: 'Signal Velocity', trend: '148/day', direction: 'neutral' }
+  ];
+
+  readonly workspaceOptions: WorkspaceOption[] = [
+    { id: 'ws-labs', name: 'Sentinent Labs' },
+    { id: 'ws-enterprise', name: 'Enterprise Pod' },
+    { id: 'ws-research', name: 'Research Ops' }
+  ];
+
+  selectedWorkspaceId = this.workspaceOptions[0].id;
+
+  featureResearchForm = {
+    feature: '',
+    category: '',
+    persona: '',
+    competitors: '',
+    time_window_days: 180
+  };
+  featureResearchIsSubmitting = false;
+  featureResearchRun: FeatureResearchRun | null = null;
+  featureResearchRunId = '';
+  featureResearchArtifacts: { themes?: any; evidence?: any; brief?: any; urls?: any; market_signal?: any } = {};
+  featureResearchTab: 'themes' | 'evidence' | 'brief' = 'themes';
+  featureResearchDemoMode = false;
+
+  decisionQueue: Decision[] = [
+    {
+      id: 'd-01',
+      title: 'Launch self-serve enterprise tier',
+      description: 'Enterprise buyers abandon checkout due to sales-assisted friction.',
+      owner: 'S. Chen',
+      confidence: 91,
+      impact: '+$8.5M ARR',
+      status: 'review',
+      risk: 'high',
+      problem: '68% of enterprise-intent sessions drop off on pricing due to forced sales interaction.',
+      evidence: '847 abandoned sessions, 23 lost deals citing purchase friction, and 14 Gong calls requesting instant checkout.',
+      tradeoff: 'Requires 4 FTEs for 6 weeks, delaying one analytics milestone.',
+      options: [
+        { title: 'Full self-serve + usage metering', detail: 'Highest upside, highest engineering cost.' },
+        { title: 'Hybrid checkout with sales assist', detail: 'Balanced risk, faster rollout.' },
+        { title: 'Demand capture waitlist', detail: 'Fastest to ship, least revenue capture.' }
+      ]
+    },
+    {
+      id: 'd-02',
+      title: 'Raise API rate limits for enterprise plans',
+      description: 'Large accounts are throttled during peak ingestion windows.',
+      owner: 'R. Gupta',
+      confidence: 86,
+      impact: '-$2.1M churn risk',
+      status: 'draft',
+      risk: 'medium',
+      problem: 'Rate limits are causing mission-critical workflows to fail for enterprise tenants.',
+      evidence: '38% of churn signals in the last 30 days mention API bottlenecks.',
+      tradeoff: 'Higher infra spend (+$42k/month) and potential noisy-neighbor impacts.',
+      options: [
+        { title: 'Global limit increase', detail: 'Fastest path, broad infra impact.' },
+        { title: 'Plan-based adaptive limits', detail: 'Best long-term control with moderate complexity.' }
+      ]
+    },
+    {
+      id: 'd-03',
+      title: 'Package board-ready weekly decision brief',
+      description: 'Exec team needs a stable narrative for decision confidence and risk.',
+      owner: 'A. Lewis',
+      confidence: 78,
+      impact: 'Faster board prep',
+      status: 'approved',
+      risk: 'low',
+      problem: 'Decision context is scattered across channels and hard to summarize quickly.',
+      evidence: 'Leadership requested manual summaries 4 weeks in a row.',
+      tradeoff: 'Automation may miss nuance without owner review.',
+      options: [
+        { title: 'Automated draft + owner approval', detail: 'Maintains quality while saving time.' },
+        { title: 'Fully automatic board packet', detail: 'Maximum speed, higher quality risk.' }
+      ]
+    }
+  ];
+
+  selectedDecisionId = this.decisionQueue[0].id;
+
+  signalStream: Signal[] = [
+    { id: 's-01', source: 'Intercom', title: 'SSO requests rising', summary: '34 enterprise tickets mention SSO and provisioning blockers.', timestamp: '4m ago' },
+    { id: 's-02', source: 'Slack', title: 'Revenue at-risk alert', summary: 'Acme account escalated after 3 unresolved P1 incidents.', timestamp: '16m ago' },
+    { id: 's-03', source: 'Gong', title: 'Win-call pattern', summary: 'Win rate rises 18% when AI decision flow is demoed live.', timestamp: '41m ago' },
+    { id: 's-04', source: 'Jira', title: 'Throughput trend', summary: 'API v2 branch reduced queue latency by 32%.', timestamp: '1h ago' }
+  ];
+
+  contextItems: Signal[] = [
+    { id: 'c-01', source: 'Slack', title: 'Customer escalation thread', summary: 'Two enterprise teams blocked by API burst throttling.', timestamp: '9m ago' },
+    { id: 'c-02', source: 'Intercom', title: 'Support trend', summary: 'Dashboard export + SSO are top friction points this week.', timestamp: '21m ago' },
+    { id: 'c-03', source: 'Gong', title: 'Call intelligence', summary: 'Buyers ask for implementation speed and reliability proof.', timestamp: '58m ago' }
+  ];
+
+  chatThreads: ChatThread[] = [
+    {
+      id: 'thread-new',
+      title: 'New chat',
+      preview: '',
+      updatedAt: 'now',
+      messages: []
+    },
+    {
+      id: 'thread-greeting',
+      title: 'Greeting',
+      preview: 'Hello! How can I help you today?',
+      updatedAt: '9m ago',
+      messages: [
+        {
+          id: 'm-hello-user',
+          role: 'user',
+          name: 'You',
+          content: 'Hello',
+          timestamp: '9m ago'
+        },
+        {
+          id: 'm-hello-ai',
+          role: 'assistant',
+          name: 'Sentinent',
+          content: 'Hello! How can I help you today?',
+          timestamp: '9m ago'
+        }
+      ]
+    },
+    {
+      id: 'thread-build',
+      title: 'Build an app based on my idea',
+      preview: 'I can break your idea into milestones and delivery risks.',
+      updatedAt: '1d ago',
+      messages: [
+        {
+          id: 'm-build-ai',
+          role: 'assistant',
+          name: 'Sentinent',
+          content: 'Share your idea and constraints. I can break it into milestones, effort, and rollout risk.',
+          timestamp: '1d ago'
+        }
+      ]
+    }
+  ];
+
+  activeChatThreadId = 'thread-new';
+
+  timelineEvents: TimelineEvent[] = [
+    {
+      id: 't-01',
+      title: 'Board packet prepared',
+      detail: 'Weekly confidence and risk summary generated.',
+      time: '2h ago',
+      tone: 'info'
+    },
+    {
+      id: 't-02',
+      title: 'Decision approved',
+      detail: 'Self-serve enterprise scope moved to implementation.',
+      time: '5h ago',
+      tone: 'success'
+    },
+    {
+      id: 't-03',
+      title: 'Bias alert detected',
+      detail: 'Recency bias was flagged in retention scoring model.',
+      time: '1d ago',
+      tone: 'warning'
+    }
+  ];
+
+  kanbanColumns: KanbanColumn[] = [
+    {
+      id: 'backlog',
+      title: 'Backlog',
+      wipLimit: 8,
+      items: [
+        { id: 'k-01', title: 'Decision rationale template', tag: 'Ops', priority: 'Low', assignee: 'AL' },
+        { id: 'k-02', title: 'SOC2 evidence map', tag: 'Security', priority: 'Medium', assignee: 'TK' }
+      ]
+    },
+    {
+      id: 'in-review',
+      title: 'In Review',
+      wipLimit: 5,
+      items: [
+        { id: 'k-03', title: 'Enterprise API limit model', tag: 'Platform', priority: 'High', assignee: 'RG' },
+        { id: 'k-04', title: 'Decision quality rubric', tag: 'PM', priority: 'Medium', assignee: 'SC' }
+      ]
+    },
+    {
+      id: 'decided',
+      title: 'Decided',
+      wipLimit: 6,
+      items: [{ id: 'k-05', title: 'Board brief automation', tag: 'Exec', priority: 'High', assignee: 'AL' }]
+    },
+    {
+      id: 'archived',
+      title: 'Archived',
+      wipLimit: 99,
+      items: [{ id: 'k-06', title: 'Legacy scoring model v1', tag: 'ML', priority: 'Low', assignee: 'MA' }]
+    }
+  ];
+
+  draggedCard: { cardId: string; fromColumnId: string } | null = null;
+
+  organizationSettings: ToggleSetting[] = [
+    { title: 'Auto-tag incoming signals', description: 'Cluster inbound signals into decision themes.', enabled: true },
+    { title: 'Require confidence threshold', description: 'Block approvals below confidence threshold.', enabled: true },
+    { title: 'Weekly executive digest', description: 'Send board-ready digest every Friday.', enabled: true }
+  ];
+
+  integrations: IntegrationSetting[] = [
+    { name: 'Slack', status: 'Connected', events: '1,204 events/day', enabled: true },
+    { name: 'Intercom', status: 'Connected', events: '632 events/day', enabled: true },
+    { name: 'Gong', status: 'Disconnected', events: 'Not syncing', enabled: false },
+    { name: 'Jira', status: 'Connected', events: '489 events/day', enabled: true }
+  ];
+
   newDecision = {
     title: '',
     problem: '',
     evidence: '',
     options: [''],
-    tradeoff: '',
     owner: '',
-    confidence: 75,
-    impact: ''
+    impact: '',
+    tradeoff: '',
+    confidence: 70
   };
 
-  // Search state
-  searchQuery = '';
-  searchResults: { type: string; title: string; subtitle: string }[] = [];
+  notifications: Toast[] = [];
 
-  // Notifications
-  notifications: { message: string; type: 'success' | 'error' | 'info' }[] = [];
+  private lastFocusedElement: HTMLElement | null = null;
+  private toastTimerById = new Map<number, number>();
+  private toastCounter = 0;
+  private featureResearchPollHandle: number | null = null;
 
-  // Drag and drop state
-  draggedCard: any = null;
-  draggedFromColumn = '';
-  dragOverColumn = '';
-
-  kpis = [
-    { label: 'Active Decisions', value: '37', change: '+12 this month' },
-    { label: 'Signals Processed', value: '14,892', change: '+42% vs last month' },
-    { label: 'Revenue at Risk', value: '$4.2M', change: 'Down $1.8M since Jan' },
-    { label: 'Decision Accuracy', value: '94%', change: 'Top decile in SaaS' }
-  ];
-
-  decisionQueue = [
-    {
-      title: 'Launch Self-Serve Enterprise Tier',
-      status: 'Approved',
-      owner: 'S. Chen',
-      confidence: 91,
-      impact: '+$8.5M ARR',
-      risk: 'Eng headcount +4, 6-week build'
-    },
-    {
-      title: 'Migrate Analytics to Real-Time Pipeline',
-      status: 'Approved',
-      owner: 'R. Gupta',
-      confidence: 88,
-      impact: '+$3.2M ARR',
-      risk: 'Infra cost +$200k/qtr'
-    },
-    {
-      title: 'Expand to EU with GDPR-First Architecture',
-      status: 'In Review',
-      owner: 'A. Lewis',
-      confidence: 79,
-      impact: '+$6.1M ARR',
-      risk: 'Legal review 4 weeks'
-    },
-    {
-      title: 'AI-Powered Churn Prediction Model v2',
-      status: 'Proposed',
-      owner: 'M. Alvarez',
-      confidence: 82,
-      impact: '-$2.1M saved churn',
-      risk: 'Data privacy audit needed'
-    },
-    {
-      title: 'Partner API & Marketplace Launch',
-      status: 'In Review',
-      owner: 'T. Kumar',
-      confidence: 74,
-      impact: '+$4.8M ecosystem rev',
-      risk: 'DevRel hire + 90-day ramp'
-    }
-  ];
-
-  decisionDetail = {
-    title: 'Launch Self-Serve Enterprise Tier',
-    status: 'Approved',
-    problem: 'Mid-market prospects (500–2000 employees) abandon at pricing page. 68% request self-serve checkout but current flow requires sales call.',
-    evidence: '847 abandoned pricing sessions, 23 lost deals citing friction, Gong sentiment analysis confirms "too slow to buy".',
-    tradeoff: 'Engineering capacity: 4 FTEs for 6 weeks. Delays mobile roadmap by one sprint.',
-    owner: 'S. Chen',
-    confidence: 91,
-    impact: '+$8.5M ARR'
-  };
-
-  decisionOptions = [
-    { title: 'Option A: Full self-serve with usage-based billing', detail: 'Highest revenue capture. Requires Stripe metering integration. 6-week build.' },
-    { title: 'Option B: Hybrid — self-serve start, sales-assist upgrade', detail: 'Lower risk. Keeps AE touchpoint for upsell. 3-week build.' },
-    { title: 'Option C: Waitlist mode with auto-qualification', detail: 'Lowest engineering cost. Tests demand first. 1-week build.' }
-  ];
-
-  signalStream = [
-    { source: 'Intercom', summary: '34 enterprise tickets this week: SSO + API rate limits top themes', time: '4m ago' },
-    { source: 'Gong', summary: 'Win rate up 18% when AI demo is shown — strongest differentiator', time: '12m ago' },
-    { source: 'Slack', summary: 'VP Sales flagged: Acme Corp ($1.2M deal) asking for SOC2 report', time: '28m ago' },
-    { source: 'Salesforce', summary: 'Pipeline jumped $3.4M this week — 6 new enterprise opportunities', time: '1h ago' },
-    { source: 'GitHub', summary: 'API v2 shipped: 3x throughput, zero breaking changes', time: '2h ago' },
-    { source: 'Stripe', summary: 'MRR crossed $890K — 14% MoM growth accelerating', time: '3h ago' }
-  ];
-
-  insightCards = [
-    {
-      title: 'Decision Accuracy',
-      value: '94%',
-      note: 'Up 11 pts since last quarter',
-      badge: 'Top Performer'
-    },
-    {
-      title: 'Bias Detection',
-      value: '2 Flagged',
-      note: 'Recency bias in pricing decisions',
-      badge: 'Auto-corrected'
-    }
-  ];
-
-  chatMessages = [
-    {
-      role: 'assistant',
-      name: 'Sentinent Core',
-      content: 'Good morning. I processed 1,247 signals overnight across Intercom, Gong, Slack, and Salesforce. Here\'s what matters:',
-      time: '9:01 AM'
-    },
-    {
-      role: 'assistant',
-      name: 'Sentinent Core',
-      content: '🔴 **Revenue Risk**: Acme Corp ($1.2M ARR) has 3 unresolved P1 tickets. Churn probability jumped to 34%. Auto-drafted an escalation decision.\n\n🟢 **Growth Signal**: Win rate is up 18% when the AI decision engine is demoed. Recommending we add it to all enterprise sales flows.\n\n📊 **Pipeline**: $3.4M in new enterprise opportunities this week. Self-serve tier conversion rate is the bottleneck.',
-      time: '9:01 AM'
-    },
-    {
-      role: 'user',
-      name: 'You',
-      content: 'What\'s the #1 decision we should make this week based on revenue impact?',
-      time: '9:03 AM'
-    },
-    {
-      role: 'assistant',
-      name: 'Sentinent Core',
-      content: 'Based on cross-referencing 14,892 signals, the highest-impact decision is **Launch Self-Serve Enterprise Tier**.\n\n**Evidence**: 847 abandoned pricing sessions, 23 lost deals citing checkout friction, and $8.5M projected ARR impact. Confidence: 91%.\n\nI\'ve drafted the decision with 3 options and tradeoff analysis. The team can review in the Decision Inbox.',
-      time: '9:04 AM'
-    },
-    {
-      role: 'user',
-      name: 'You',
-      content: 'Show me all churn signals for the past 30 days.',
-      time: '9:06 AM'
-    },
-    {
-      role: 'assistant',
-      name: 'Sentinent Core',
-      content: 'Churn analysis (30 days):\n\n• **14 accounts** flagged with elevated risk (up from 8 last month)\n• **Top drivers**: API rate limits (38%), dashboard performance (29%), missing SSO (18%)\n• **Revenue at risk**: $4.2M ARR\n• **Trend**: Risk is declining — down $1.8M since we shipped the batch export queue\n\nThe AI model predicts that resolving the API rate limit issue alone would reduce churn risk by ~$2.1M.',
-      time: '9:07 AM'
-    }
-  ];
-
-  chatSuggestions = [
-    'What\'s our projected ARR impact this quarter?',
-    'Compare our win rate vs last quarter.',
-    'Draft a decision for the biggest revenue risk.',
-    'What signals should I act on today?'
-  ];
-
-  contextItems = [
-    {
-      source: 'Salesforce',
-      title: 'Pipeline Analysis',
-      summary: 'Enterprise pipeline at $12.4M with 68% weighted close rate. 6 new opps this week.',
-      time: '5m ago'
-    },
-    {
-      source: 'Intercom',
-      title: 'Support Trend Analysis',
-      summary: '34 enterprise tickets: SSO issues (38%), API limits (29%), dashboard latency (18%).',
-      time: '18m ago'
-    },
-    {
-      source: 'Gong',
-      title: 'Win/Loss Intelligence',
-      summary: 'AI decision engine cited as differentiator in 72% of closed-won deals this month.',
-      time: '45m ago'
-    },
-    {
-      source: 'Stripe',
-      title: 'Revenue Metrics',
-      summary: 'MRR $890K (+14% MoM). Net revenue retention: 128%. LTV/CAC ratio: 4.8x.',
-      time: '1h ago'
-    }
-  ];
-
-  kanbanColumns = [
-    {
-      title: 'Backlog',
-      items: [
-        { title: 'SOC2 Compliance Dashboard', tag: 'Security', priority: 'High', assignee: 'T. Kumar' },
-        { title: 'Partner API Documentation', tag: 'Platform', priority: 'Med', assignee: 'J. Park' },
-        { title: 'Multi-Region Failover', tag: 'Infra', priority: 'High', assignee: 'R. Singh' }
-      ]
-    },
-    {
-      title: 'In Progress',
-      items: [
-        { title: 'Self-Serve Enterprise Checkout', tag: 'Revenue', priority: 'P0', assignee: 'S. Chen' },
-        { title: 'Real-Time Analytics Pipeline', tag: 'Performance', priority: 'High', assignee: 'R. Gupta' },
-        { title: 'AI Churn Prediction v2', tag: 'ML', priority: 'High', assignee: 'M. Alvarez' }
-      ]
-    },
-    {
-      title: 'Review',
-      items: [
-        { title: 'GDPR Data Residency Module', tag: 'Compliance', priority: 'High', assignee: 'A. Lewis' },
-        { title: 'Batch Export Queue', tag: 'API', priority: 'Med', assignee: 'A. Lewis' }
-      ]
-    },
-    {
-      title: 'Shipped',
-      items: [
-        { title: 'API v2 (3x Throughput)', tag: 'Platform', priority: 'P0', assignee: 'R. Singh' },
-        { title: 'Signal Ingestion Pipeline', tag: 'Data', priority: 'High', assignee: 'M. Alvarez' },
-        { title: 'Enterprise SSO (SAML + OIDC)', tag: 'Security', priority: 'P0', assignee: 'T. Kumar' }
-      ]
-    }
-  ];
-
-  sprintOverview = {
-    name: 'Sprint 24 — Revenue Acceleration',
-    goal: 'Ship self-serve enterprise tier and real-time analytics',
-    velocity: '68 pts',
-    health: 'On Track'
-  };
-
-  sprintBacklog = [
-    { title: 'Self-serve checkout flow', points: 13, owner: 'S. Chen', status: 'In Progress' },
-    { title: 'Stripe metering integration', points: 8, owner: 'S. Chen', status: 'In Progress' },
-    { title: 'Real-time analytics pipeline', points: 13, owner: 'R. Gupta', status: 'In Progress' },
-    { title: 'GDPR data residency module', points: 8, owner: 'A. Lewis', status: 'Review' },
-    { title: 'Churn prediction model v2', points: 13, owner: 'M. Alvarez', status: 'In Progress' },
-    { title: 'API rate limit upgrade', points: 5, owner: 'R. Singh', status: 'Done' },
-    { title: 'SOC2 evidence collection', points: 3, owner: 'T. Kumar', status: 'Backlog' }
-  ];
-
-  automationRules = [
-    { title: 'Revenue risk → auto-escalate', trigger: 'Account ARR > $500K & churn risk > 20%', action: 'Alert VP Sales + draft retention decision', status: 'On' },
-    { title: 'Win pattern detected → replicate', trigger: 'Win rate > 80% with specific demo flow', action: 'Update playbook + notify all AEs', status: 'On' },
-    { title: 'P0 bug → war room', trigger: 'Severity = P0 & enterprise affected', action: 'Create war room, page on-call, notify CSM', status: 'On' },
-    { title: 'Pipeline milestone → forecast update', trigger: 'Weighted pipeline changes > $500K', action: 'Update board forecast, notify CFO', status: 'On' },
-    { title: 'Competitor mentioned → intel brief', trigger: 'Competitor name in Gong call', action: 'Generate competitive intel summary', status: 'Paused' }
-  ];
-
-  integrations = [
-    { name: 'Salesforce', status: 'Connected', detail: '1,247 opportunities synced' },
-    { name: 'Slack', status: 'Connected', detail: '18 workspaces, 342 channels' },
-    { name: 'Intercom', status: 'Connected', detail: '12,489 conversations indexed' },
-    { name: 'Gong', status: 'Connected', detail: '2,847 calls analyzed' },
-    { name: 'GitHub', status: 'Connected', detail: '14 repos, 892 PRs tracked' },
-    { name: 'Jira', status: 'Connected', detail: '6 projects, 1,247 issues synced' },
-    { name: 'Stripe', status: 'Connected', detail: 'Revenue metrics live' },
-    { name: 'Notion', status: 'Connected', detail: 'Product docs + wikis' },
-    { name: 'Microsoft Teams', status: 'Disconnected', detail: 'Connect for real-time alerts' },
-    { name: 'Zoom', status: 'Disconnected', detail: 'Import call transcripts' }
-  ];
-
-  reports = [
-    { title: 'Decision Accuracy', value: '94%', change: '+11 pts QoQ' },
-    { title: 'Time to Decision', value: '1.8 days', change: '-67% vs manual process' },
-    { title: 'Revenue Influenced', value: '$24.8M', change: 'Decisions leading to revenue' },
-    { title: 'Signals → Actions', value: '89%', change: 'Signal-to-decision conversion' }
-  ];
-
-  settings = [
-    { title: 'AI Decision Engine', description: 'Auto-draft decisions from cross-signal analysis', enabled: true },
-    { title: 'Revenue Impact Scoring', description: 'AI-powered revenue attribution on every decision', enabled: true },
-    { title: 'Churn Prediction Alerts', description: 'Proactive alerts when accounts cross risk thresholds', enabled: true },
-    { title: 'Competitive Intelligence', description: 'Auto-generate briefs from sales call mentions', enabled: true },
-    { title: 'Board Report Auto-Generation', description: 'Weekly executive summary for leadership', enabled: false }
-  ];
-
-  toggleSidebar() {
-    this.isSidebarOpen = !this.isSidebarOpen;
-    document.body.style.overflow = this.isSidebarOpen ? 'hidden' : '';
+  get activeDecision(): Decision {
+    return this.decisionQueue.find(item => item.id === this.selectedDecisionId) ?? this.decisionQueue[0];
   }
 
+  get inboxUnreadCount(): number {
+    return this.decisionQueue.filter(item => item.status === 'review').length;
+  }
 
-  addContext(channelEl: HTMLSelectElement, titleEl: HTMLInputElement, noteEl: HTMLTextAreaElement) {
-    const source = channelEl.value.trim();
-    const title = titleEl.value.trim();
-    const summary = noteEl.value.trim();
-    if (!source || (!title && !summary)) return;
-    this.contextItems.unshift({
-      source,
-      title: title || `${source} context`,
-      summary: summary || 'Context added.',
-      time: 'just now'
+  get hasDisconnectedIntegrations(): boolean {
+    return this.integrations.some(item => item.status === 'Disconnected');
+  }
+
+  get modalIsValid(): boolean {
+    return (
+      this.newDecision.title.trim().length > 0
+      && this.newDecision.problem.trim().length > 0
+      && this.newDecision.evidence.trim().length > 0
+      && this.newDecision.owner.trim().length > 0
+      && this.newDecision.impact.trim().length > 0
+      && this.newDecision.options.some(opt => opt.trim().length > 0)
+    );
+  }
+
+  get activeChatThread(): ChatThread {
+    return this.chatThreads.find(thread => thread.id === this.activeChatThreadId) ?? this.chatThreads[0];
+  }
+
+  get filteredChatThreads(): ChatThread[] {
+    const query = this.chatThreadSearch.trim().toLowerCase();
+    if (!query) {
+      return this.chatThreads;
+    }
+
+    return this.chatThreads.filter(thread => {
+      return (
+        thread.title.toLowerCase().includes(query)
+        || thread.preview.toLowerCase().includes(query)
+      );
     });
-    titleEl.value = '';
-    noteEl.value = '';
-    channelEl.selectedIndex = 0;
   }
 
-  removeContext(index: number) {
-    this.contextItems.splice(index, 1);
+  get chatMessages(): ChatMessage[] {
+    return this.activeChatThread.messages;
   }
 
-  async sendChat() {
-    const prompt = this.chatInput.trim();
-    if (!prompt || this.chatIsLoading) return;
+  set chatMessages(messages: ChatMessage[]) {
+    this.activeChatThread.messages = messages;
+  }
 
-    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    this.chatMessages.push({
-      role: 'user',
-      name: 'You',
-      content: prompt,
-      time: now
-    });
-    this.chatInput = '';
-    this.chatIsLoading = true;
-    this.chatError = '';
+  get chatIsEmpty(): boolean {
+    return this.chatMessages.length === 0;
+  }
 
+  get chatGreetingPeriod(): string {
+    const hour = new Date().getHours();
+    if (hour < 12) {
+      return 'morning';
+    }
+    if (hour < 18) {
+      return 'afternoon';
+    }
+    return 'evening';
+  }
+
+  get activeWorkspaceName(): string {
+    return this.workspaceOptions.find(item => item.id === this.selectedWorkspaceId)?.name ?? this.workspaceOptions[0].name;
+  }
+
+  get featureResearchThemes(): FeatureResearchTheme[] {
+    const raw = this.featureResearchArtifacts?.themes;
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw as FeatureResearchTheme[];
+    if (Array.isArray(raw.items)) return raw.items as FeatureResearchTheme[];
+    return [];
+  }
+
+  get featureResearchEvidence(): FeatureResearchEvidence[] {
+    const raw = this.featureResearchArtifacts?.evidence;
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw as FeatureResearchEvidence[];
+    return [];
+  }
+
+  get featureResearchBrief(): any {
+    return this.featureResearchArtifacts?.brief ?? null;
+  }
+
+  ngOnInit(): void {
+    if (window.location.pathname === '/agent') {
+      this.currentView = 'agent';
+    }
+
+    const savedTheme = localStorage.getItem('sentinent-theme');
+    if (savedTheme) {
+      this.isDarkMode = savedTheme === 'dark';
+    } else {
+      this.isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    const savedTone = localStorage.getItem('sentinent-tone');
+    if (savedTone === 'graphite' || savedTone === 'signal') {
+      this.toneMode = savedTone;
+    }
+    this.applyThemeClass();
+    void this.loadFeatureResearchConfig();
+  }
+
+  ngOnDestroy(): void {
+    this.toastTimerById.forEach(timer => window.clearTimeout(timer));
+    this.toastTimerById.clear();
+    this.stopFeatureResearchPolling();
+    document.body.style.overflow = '';
+  }
+
+  toggleSidebar(): void {
+    this.isWorkspaceMenuOpen = false;
+    if (window.matchMedia('(max-width: 1024px)').matches) {
+      this.isSidebarOpen = !this.isSidebarOpen;
+      document.body.style.overflow = this.isSidebarOpen ? 'hidden' : '';
+      return;
+    }
+
+    this.isSidebarHiddenDesktop = !this.isSidebarHiddenDesktop;
+    document.body.style.overflow = '';
+  }
+
+  setView(view: ViewKey): void {
+    this.currentView = view;
+    this.isWorkspaceMenuOpen = false;
+    if (this.isSidebarOpen) {
+      this.isSidebarOpen = false;
+      document.body.style.overflow = '';
+    }
+    if (view !== 'inbox') {
+      this.selectedDecisionId = this.decisionQueue[0]?.id ?? this.selectedDecisionId;
+    }
+  }
+
+  toggleTheme(): void {
+    this.isDarkMode = !this.isDarkMode;
+    localStorage.setItem('sentinent-theme', this.isDarkMode ? 'dark' : 'light');
+    this.applyThemeClass();
+  }
+
+  toggleWorkspaceMenu(): void {
+    this.isWorkspaceMenuOpen = !this.isWorkspaceMenuOpen;
+  }
+
+  selectWorkspace(workspaceID: string): void {
+    const workspace = this.workspaceOptions.find(item => item.id === workspaceID);
+    if (!workspace) {
+      return;
+    }
+    this.selectedWorkspaceId = workspaceID;
+    this.isWorkspaceMenuOpen = false;
+    this.showNotification(`Workspace switched to ${workspace.name}.`, 'info');
+  }
+
+  toggleTone(): void {
+    this.toneMode = this.toneMode === 'graphite' ? 'signal' : 'graphite';
+    localStorage.setItem('sentinent-tone', this.toneMode);
+    this.applyThemeClass();
+    this.showNotification(`Tone switched to ${this.toneMode}.`, 'info');
+  }
+
+  async loadFeatureResearchConfig(): Promise<void> {
     try {
-      const contextBlock = this.contextItems.length
-        ? '\nContext:\n' + this.contextItems
-          .map((item, idx) => `${idx + 1}. [${item.source}] ${item.title} — ${item.summary}`)
-          .join('\n')
-        : '';
+      const response = await fetch('/api/agent/config');
+      if (!response.ok) {
+        return;
+      }
+      const data = await response.json();
+      this.featureResearchDemoMode = Boolean(data?.demo_mode);
+    } catch {
+      this.featureResearchDemoMode = false;
+    }
+  }
 
-      const messages = [
-        { role: 'system', content: `${this.systemPrompt}${contextBlock}` },
-        ...this.chatMessages.map(msg => ({
-          role: msg.role === 'user' ? 'user' : 'assistant',
-          content: msg.content
-        }))
-      ];
+  async startFeatureResearchRun(): Promise<void> {
+    const feature = this.featureResearchForm.feature.trim();
+    const category = this.featureResearchForm.category.trim();
+    if (!feature || !category || this.featureResearchIsSubmitting) {
+      return;
+    }
 
-      const response = await fetch(`${this.llmBaseUrl}/api/chat`, {
+    this.featureResearchIsSubmitting = true;
+    try {
+      const competitors = this.featureResearchForm.competitors
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean);
+
+      const response = await fetch('/api/agent/feature-research', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: this.llmModel,
-          messages,
-          stream: false
+          feature,
+          category,
+          persona: this.featureResearchForm.persona.trim() || undefined,
+          competitors,
+          time_window_days: Number(this.featureResearchForm.time_window_days) || 180
         })
       });
-
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(`LLM request failed: ${response.status}`);
+        throw new Error(data?.error || 'Failed to start feature research run');
       }
 
-      const data = await response.json();
-      const content = data?.message?.content || data?.response || 'No response received.';
-
-      this.chatMessages.push({
-        role: 'assistant',
-        name: 'Sentinent Core',
-        content: content.trim(),
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      });
+      this.featureResearchRunId = String(data?.runId || '');
+      this.featureResearchRun = null;
+      this.featureResearchArtifacts = {};
+      this.featureResearchTab = 'themes';
+      this.featureResearchDemoMode = Boolean(data?.demo_mode ?? this.featureResearchDemoMode);
+      this.startFeatureResearchPolling();
+      this.showNotification('Feature research run started.', 'success');
     } catch (error) {
-      this.chatError = 'Unable to reach the local LLM. Check that it is running and CORS is enabled.';
-      this.chatMessages.push({
-        role: 'assistant',
-        name: 'Sentinent Core',
-        content: 'I could not reach the local model. Please verify the LLM server is running.',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      });
-      console.error(error);
+      this.showNotification(error instanceof Error ? error.message : 'Failed to start run', 'error');
     } finally {
-      this.chatIsLoading = false;
+      this.featureResearchIsSubmitting = false;
     }
   }
 
-  // === Lifecycle ===
-  ngOnInit() {
-    // Simulate loading
-    this.isLoading = true;
-    setTimeout(() => {
-      this.isLoading = false;
-    }, 800);
-
-    // Load theme
-    const savedTheme = localStorage.getItem('theme');
-    this.isDarkMode = savedTheme === 'dark';
-    if (this.isDarkMode) {
-      document.documentElement.classList.add('dark');
-    }
-
-    // Load settings and data
-    this.loadSettings();
-    this.loadFromLocalStorage();
+  setFeatureResearchTab(tab: 'themes' | 'evidence' | 'brief'): void {
+    this.featureResearchTab = tab;
   }
 
-  // === New Decision Modal ===
-  openNewDecisionModal() {
+  private startFeatureResearchPolling(): void {
+    this.stopFeatureResearchPolling();
+    if (!this.featureResearchRunId) {
+      return;
+    }
+
+    void this.pollFeatureResearchRun();
+    this.featureResearchPollHandle = window.setInterval(() => {
+      void this.pollFeatureResearchRun();
+    }, 2000);
+  }
+
+  private stopFeatureResearchPolling(): void {
+    if (this.featureResearchPollHandle !== null) {
+      window.clearInterval(this.featureResearchPollHandle);
+      this.featureResearchPollHandle = null;
+    }
+  }
+
+  async pollFeatureResearchRun(): Promise<void> {
+    if (!this.featureResearchRunId) return;
+
+    try {
+      const runResp = await fetch(`/api/agent/runs/${this.featureResearchRunId}`);
+      if (runResp.ok) {
+        this.featureResearchRun = await runResp.json();
+      }
+
+      const artifactResp = await fetch(`/api/agent/runs/${this.featureResearchRunId}/artifacts`);
+      if (artifactResp.ok) {
+        this.featureResearchArtifacts = await artifactResp.json();
+      }
+
+      if (this.featureResearchRun?.status === 'completed' || this.featureResearchRun?.status === 'failed') {
+        this.stopFeatureResearchPolling();
+      }
+    } catch {
+      if (this.featureResearchRun) {
+        this.featureResearchRun.error = 'Unable to poll run state';
+      }
+    }
+  }
+
+  onSearch(query: string): void {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
+      this.searchResults = [];
+      return;
+    }
+
+    const decisionMatches = this.decisionQueue
+      .filter(item => item.title.toLowerCase().includes(normalized) || item.description.toLowerCase().includes(normalized))
+      .slice(0, 4)
+      .map<SearchResult>(item => ({
+        id: `sr-d-${item.id}`,
+        type: 'Decision',
+        title: item.title,
+        subtitle: `${item.owner} - ${item.confidence}% confidence`,
+        targetView: 'inbox',
+        targetId: item.id
+      }));
+
+    const signalMatches = this.signalStream
+      .filter(item => item.title.toLowerCase().includes(normalized) || item.summary.toLowerCase().includes(normalized))
+      .slice(0, 3)
+      .map<SearchResult>(item => ({
+        id: `sr-s-${item.id}`,
+        type: 'Signal',
+        title: item.title,
+        subtitle: `${item.source} - ${item.timestamp}`,
+        targetView: 'inbox'
+      }));
+
+    const viewMatches = this.viewOptions
+      .filter(item => item.label.toLowerCase().includes(normalized))
+      .slice(0, 2)
+      .map<SearchResult>(item => ({
+        id: `sr-v-${item.key}`,
+        type: 'View',
+        title: item.label,
+        subtitle: 'Navigate',
+        targetView: item.key
+      }));
+
+    this.searchResults = [...decisionMatches, ...signalMatches, ...viewMatches].slice(0, 8);
+  }
+
+  clearSearch(): void {
+    this.searchQuery = '';
+    this.searchResults = [];
+  }
+
+  useSearchResult(result: SearchResult): void {
+    this.setView(result.targetView);
+    if (result.targetView === 'inbox' && result.targetId) {
+      this.selectedDecisionId = result.targetId;
+    }
+    this.clearSearch();
+  }
+
+  addContext(): void {
+    const title = this.contextDraft.title.trim();
+    const summary = this.contextDraft.summary.trim();
+
+    if (!title && !summary) {
+      this.showNotification('Add a title or summary before attaching context.', 'error');
+      return;
+    }
+
+    this.contextItems.unshift({
+      id: this.createId('ctx'),
+      source: this.contextDraft.source,
+      title: title || `${this.contextDraft.source} signal`,
+      summary: summary || 'Signal attached for decision context.',
+      timestamp: 'just now'
+    });
+
+    this.contextDraft.title = '';
+    this.contextDraft.summary = '';
+    this.showNotification('Context attached.', 'success');
+  }
+
+  removeContext(index: number): void {
+    this.contextItems.splice(index, 1);
+  }
+
+  startNewChatThread(): void {
+    const existingDraft = this.chatThreads.find(thread => thread.id === 'thread-new');
+    if (existingDraft) {
+      existingDraft.messages = [];
+      existingDraft.preview = '';
+      existingDraft.updatedAt = 'now';
+      this.activeChatThreadId = existingDraft.id;
+      return;
+    }
+
+    this.chatThreads.unshift({
+      id: 'thread-new',
+      title: 'New chat',
+      preview: '',
+      updatedAt: 'now',
+      messages: []
+    });
+    this.activeChatThreadId = 'thread-new';
+  }
+
+  openChatThread(threadId: string): void {
+    this.activeChatThreadId = threadId;
+  }
+
+  onChatKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      void this.sendChat();
+    }
+  }
+
+  autoResizeTextarea(event: Event): void {
+    const element = event.target as HTMLTextAreaElement;
+    element.style.height = 'auto';
+    element.style.height = `${Math.min(element.scrollHeight, 128)}px`;
+  }
+
+  async sendChat(): Promise<void> {
+    const prompt = this.chatInput.trim();
+    if (!prompt || this.chatIsLoading) {
+      return;
+    }
+
+    const activeThread = this.activeChatThread;
+    this.chatMessages.push({
+      id: this.createId('msg-user'),
+      role: 'user',
+      name: 'You',
+      content: prompt,
+      timestamp: 'just now'
+    });
+    activeThread.preview = prompt;
+    activeThread.updatedAt = 'now';
+
+    if (activeThread.title === 'New chat') {
+      activeThread.title = this.createThreadTitle(prompt);
+    }
+
+    this.promoteChatThread(activeThread.id);
+    this.chatInput = '';
+    this.chatIsLoading = true;
+
+    await new Promise(resolve => window.setTimeout(resolve, 420));
+
+    this.chatMessages.push({
+      id: this.createId('msg-ai'),
+      role: 'assistant',
+      name: 'Sentinent',
+      content: this.composeAssistantReply(prompt),
+      timestamp: 'now',
+      citations: this.contextItems.length ? ['[1]', '[2]'] : undefined
+    });
+
+    activeThread.preview = this.chatMessages[this.chatMessages.length - 1]?.content ?? prompt;
+    activeThread.updatedAt = 'now';
+    this.chatIsLoading = false;
+  }
+
+  useSuggestion(suggestion: string): void {
+    this.chatInput = suggestion;
+    void this.sendChat();
+  }
+
+  clearChat(): void {
+    this.chatMessages = [];
+    this.activeChatThread.preview = '';
+    this.activeChatThread.updatedAt = 'now';
+    if (this.activeChatThread.id === 'thread-new') {
+      this.activeChatThread.title = 'New chat';
+    }
+    this.showNotification('Chat cleared.', 'info');
+  }
+
+  exportChat(): void {
+    const payload = this.chatMessages
+      .map(item => `${item.name} (${item.timestamp})\n${item.content}`)
+      .join('\n\n');
+
+    const blob = new Blob([payload], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `sentinent-chat-${new Date().toISOString().slice(0, 10)}.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    this.showNotification('Chat exported.', 'success');
+  }
+
+  selectDecision(decisionId: string): void {
+    this.selectedDecisionId = decisionId;
+  }
+
+  getKpiValue(card: KpiCard): string {
+    if (card.id === 'active') {
+      return `${this.decisionQueue.length}`;
+    }
+    if (card.id === 'confidence') {
+      const sum = this.decisionQueue.reduce((acc, item) => acc + item.confidence, 0);
+      const avg = this.decisionQueue.length ? Math.round(sum / this.decisionQueue.length) : 0;
+      return `${avg}%`;
+    }
+    if (card.id === 'time') {
+      return '24h';
+    }
+    return '148/day';
+  }
+
+  kpiDirectionIcon(direction: KpiCard['direction']): string {
+    if (direction === 'up') return 'UP';
+    if (direction === 'down') return 'DOWN';
+    return '.';
+  }
+
+  riskClass(risk: RiskLevel): string {
+    if (risk === 'high') return 'risk-high';
+    if (risk === 'medium') return 'risk-medium';
+    return 'risk-low';
+  }
+
+  statusLabel(status: DecisionStatus): string {
+    if (status === 'review') return 'In Review';
+    if (status === 'approved') return 'Approved';
+    if (status === 'archived') return 'Archived';
+    return 'Draft';
+  }
+
+  statusClass(status: DecisionStatus): string {
+    if (status === 'approved') return 'status-approved';
+    if (status === 'review') return 'status-review';
+    if (status === 'archived') return 'status-archived';
+    return 'status-draft';
+  }
+
+  openNewDecisionModal(): void {
+    this.lastFocusedElement = document.activeElement as HTMLElement;
     this.showNewDecisionModal = true;
+    document.body.style.overflow = 'hidden';
+
     this.newDecision = {
       title: '',
       problem: '',
       evidence: '',
       options: [''],
-      tradeoff: '',
       owner: '',
-      confidence: 75,
-      impact: ''
+      impact: '',
+      tradeoff: '',
+      confidence: 70
     };
+
+    window.setTimeout(() => {
+      this.newDecisionTitleInput?.nativeElement.focus();
+    }, 0);
   }
 
-  closeNewDecisionModal() {
+  closeNewDecisionModal(): void {
     this.showNewDecisionModal = false;
+    document.body.style.overflow = this.isSidebarOpen ? 'hidden' : '';
+    if (this.lastFocusedElement) {
+      this.lastFocusedElement.focus();
+    }
   }
 
-  addOption() {
+  onNewDecisionModalKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Tab') {
+      return;
+    }
+
+    const modal = this.newDecisionModal?.nativeElement;
+    if (!modal) return;
+
+    const focusable = Array.from(
+      modal.querySelectorAll<HTMLElement>(
+        'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter(node => !node.hasAttribute('disabled'));
+
+    if (!focusable.length) {
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement as HTMLElement;
+
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+      return;
+    }
+
+    if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  addNewOption(): void {
     this.newDecision.options.push('');
   }
 
-  removeOption(index: number) {
-    if (this.newDecision.options.length > 1) {
-      this.newDecision.options.splice(index, 1);
+  removeNewOption(index: number): void {
+    if (this.newDecision.options.length === 1) {
+      this.newDecision.options[0] = '';
+      return;
     }
+    this.newDecision.options.splice(index, 1);
   }
 
-  saveNewDecision() {
-    if (!this.newDecision.title.trim()) {
-      this.showNotification('Please enter a decision title', 'error');
+  saveNewDecision(): void {
+    if (!this.modalIsValid) {
+      this.showNotification('Complete required fields before creating the decision.', 'error');
       return;
     }
 
-    const decision = {
-      title: this.newDecision.title,
-      status: 'Proposed',
-      owner: this.newDecision.owner || 'Unassigned',
+    const newItem: Decision = {
+      id: this.createId('dec'),
+      title: this.newDecision.title.trim(),
+      description: this.newDecision.problem.trim(),
+      owner: this.newDecision.owner.trim(),
       confidence: this.newDecision.confidence,
-      impact: this.newDecision.impact || 'TBD',
-      risk: this.newDecision.tradeoff || 'No risks identified'
+      impact: this.newDecision.impact.trim(),
+      status: 'draft',
+      risk: this.newDecision.confidence < 60 ? 'high' : this.newDecision.confidence < 80 ? 'medium' : 'low',
+      problem: this.newDecision.problem.trim(),
+      evidence: this.newDecision.evidence.trim(),
+      tradeoff: this.newDecision.tradeoff.trim(),
+      options: this.newDecision.options
+        .map(option => option.trim())
+        .filter(option => option.length > 0)
+        .map(option => ({ title: option, detail: 'Newly added option from decision form.' }))
     };
 
-    this.decisionQueue.unshift(decision);
-    this.updateKpis();
-    this.showNotification(`Decision "${decision.title}" created successfully`, 'success');
+    this.decisionQueue.unshift(newItem);
+    this.selectedDecisionId = newItem.id;
+
+    const backlog = this.kanbanColumns.find(col => col.id === 'backlog');
+    backlog?.items.unshift({
+      id: this.createId('kb'),
+      title: newItem.title,
+      tag: 'Decision',
+      priority: newItem.risk === 'high' ? 'High' : newItem.risk === 'medium' ? 'Medium' : 'Low',
+      assignee: this.initialsFor(newItem.owner)
+    });
+
+    this.showNotification('Decision created.', 'success');
     this.closeNewDecisionModal();
+    this.setView('inbox');
   }
 
-  // === Decision Management ===
-  approveDecision(index: number) {
-    if (this.decisionQueue[index]) {
-      this.decisionQueue[index].status = 'Approved';
-      this.showNotification(`Decision approved: ${this.decisionQueue[index].title}`, 'success');
-    }
-  }
-
-  deleteDecision(index: number) {
-    const title = this.decisionQueue[index]?.title;
-    this.decisionQueue.splice(index, 1);
-    this.updateKpis();
-    this.showNotification(`Decision "${title}" deleted`, 'info');
-  }
-
-  updateKpis() {
-    this.kpis[0].value = String(this.decisionQueue.length);
-  }
-
-  // === Search ===
-  onSearch(query: string) {
-    this.searchQuery = query;
-    if (!query.trim()) {
-      this.searchResults = [];
-      return;
-    }
-
-    const q = query.toLowerCase();
-    const results: { type: string; title: string; subtitle: string }[] = [];
-
-    // Search decisions
-    this.decisionQueue.forEach(d => {
-      if (d.title.toLowerCase().includes(q) || d.owner.toLowerCase().includes(q)) {
-        results.push({ type: 'Decision', title: d.title, subtitle: `Owner: ${d.owner}` });
-      }
-    });
-
-    // Search signals
-    this.signalStream.forEach(s => {
-      if (s.summary.toLowerCase().includes(q) || s.source.toLowerCase().includes(q)) {
-        results.push({ type: 'Signal', title: s.source, subtitle: s.summary });
-      }
-    });
-
-    // Search kanban
-    this.kanbanColumns.forEach(col => {
-      col.items.forEach(item => {
-        if (item.title.toLowerCase().includes(q) || item.assignee.toLowerCase().includes(q)) {
-          results.push({ type: 'Kanban', title: item.title, subtitle: `${col.title} • ${item.assignee}` });
-        }
-      });
-    });
-
-    this.searchResults = results.slice(0, 8);
-  }
-
-  clearSearch() {
-    this.searchQuery = '';
-    this.searchResults = [];
-  }
-
-  // === Notifications ===
-  showNotification(message: string, type: 'success' | 'error' | 'info') {
-    this.notifications.push({ message, type });
-    setTimeout(() => this.dismissNotification(0), 4000);
-  }
-
-  dismissNotification(index: number) {
-    this.notifications.splice(index, 1);
-  }
-
-  // === Chat Suggestions ===
-  useSuggestion(text: string) {
-    this.chatInput = text;
-    this.sendChat();
-  }
-
-  clearChat() {
-    this.chatMessages = [];
-    this.showNotification('Chat history cleared', 'info');
-  }
-
-  exportChat() {
-    const content = this.chatMessages.map(m => `[${m.time}] ${m.name}: ${m.content}`).join('\n\n');
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sentinent-chat-${new Date().toISOString().slice(0, 10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    this.showNotification('Chat exported successfully', 'success');
-  }
-
-  // === Kanban Drag & Drop ===
-  onDragStart(event: DragEvent, card: any, columnTitle: string) {
-    this.draggedCard = card;
-    this.draggedFromColumn = columnTitle;
+  onDragStart(event: DragEvent, columnId: string, cardId: string): void {
+    this.draggedCard = { cardId, fromColumnId: columnId };
+    event.dataTransfer?.setData('text/plain', cardId);
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'move';
     }
   }
 
-  onDragOver(event: DragEvent, columnTitle: string) {
+  onDragOver(event: DragEvent): void {
     event.preventDefault();
-    this.dragOverColumn = columnTitle;
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
   }
 
-  onDragLeave() {
-    this.dragOverColumn = '';
-  }
-
-  onDrop(event: DragEvent, targetColumnTitle: string) {
+  onDrop(event: DragEvent, targetColumnId: string): void {
     event.preventDefault();
-    this.dragOverColumn = '';
+    if (!this.draggedCard) return;
 
-    if (!this.draggedCard || this.draggedFromColumn === targetColumnTitle) {
+    const sourceColumn = this.kanbanColumns.find(col => col.id === this.draggedCard?.fromColumnId);
+    const targetColumn = this.kanbanColumns.find(col => col.id === targetColumnId);
+
+    if (!sourceColumn || !targetColumn) {
+      this.draggedCard = null;
       return;
     }
 
-    // Remove from source column
-    const sourceCol = this.kanbanColumns.find(c => c.title === this.draggedFromColumn);
-    if (sourceCol) {
-      const cardIndex = sourceCol.items.findIndex(i => i.title === this.draggedCard.title);
-      if (cardIndex > -1) {
-        sourceCol.items.splice(cardIndex, 1);
-      }
+    const cardIndex = sourceColumn.items.findIndex(item => item.id === this.draggedCard?.cardId);
+    if (cardIndex < 0) {
+      this.draggedCard = null;
+      return;
     }
 
-    // Add to target column
-    const targetCol = this.kanbanColumns.find(c => c.title === targetColumnTitle);
-    if (targetCol) {
-      targetCol.items.push(this.draggedCard);
-    }
-
-    this.showNotification(`Moved "${this.draggedCard.title}" to ${targetColumnTitle}`, 'success');
+    const [card] = sourceColumn.items.splice(cardIndex, 1);
+    targetColumn.items.push(card);
     this.draggedCard = null;
-    this.draggedFromColumn = '';
+    this.showNotification(`Moved "${card.title}" to ${targetColumn.title}.`, 'info');
   }
 
-  // === Automation Toggles ===
-  toggleAutomation(index: number) {
-    const rule = this.automationRules[index];
-    rule.status = rule.status === 'On' ? 'Paused' : 'On';
-    this.showNotification(`Automation "${rule.title}" is now ${rule.status}`, 'info');
+  toggleOrgSetting(index: number): void {
+    this.organizationSettings[index].enabled = !this.organizationSettings[index].enabled;
   }
 
-  // === Settings Persistence ===
-  toggleSetting(index: number) {
-    this.settings[index].enabled = !this.settings[index].enabled;
-    this.saveSettings();
-    this.showNotification(
-      `${this.settings[index].title} ${this.settings[index].enabled ? 'enabled' : 'disabled'}`,
-      'info'
-    );
+  toggleIntegration(index: number): void {
+    const item = this.integrations[index];
+    item.enabled = !item.enabled;
+    item.status = item.enabled ? 'Connected' : 'Disconnected';
   }
 
-  saveSettings() {
-    localStorage.setItem('sentinent-settings', JSON.stringify(this.settings));
-  }
-
-  loadSettings() {
-    const saved = localStorage.getItem('sentinent-settings');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          this.settings = parsed;
-        }
-      } catch (e) {
-        console.error('Failed to load settings:', e);
-      }
-    }
-  }
-
-  // === Sprint Management ===
-  updateSprintStatus(index: number, status: string) {
-    if (this.sprintBacklog[index]) {
-      this.sprintBacklog[index].status = status;
-      this.showNotification(`Updated "${this.sprintBacklog[index].title}" to ${status}`, 'info');
-    }
-  }
-
-  // === Integration Management ===
-  toggleIntegration(index: number) {
-    const integration = this.integrations[index];
-    if (integration.status === 'Connected') {
-      integration.status = 'Disabled';
-    } else if (integration.status === 'Disabled') {
-      integration.status = 'Connected';
-    }
-    this.showNotification(`${integration.name} is now ${integration.status}`, 'info');
-  }
-
-  // === Keyboard Shortcuts ===
   @HostListener('document:keydown', ['$event'])
-  handleKeyboardEvent(event: KeyboardEvent) {
-    // Cmd/Ctrl + K = Command Palette
-    if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+  handleKeyboard(event: KeyboardEvent): void {
+    const key = event.key.toLowerCase();
+
+    if ((event.metaKey || event.ctrlKey) && key === 'k') {
       event.preventDefault();
-      this.toggleCommandPalette();
+      this.focusGlobalSearch();
       return;
     }
 
-    // Escape = Close modals
+    if ((event.metaKey || event.ctrlKey) && key === '1') {
+      event.preventDefault();
+      this.setView('chat');
+      return;
+    }
+
+    if ((event.metaKey || event.ctrlKey) && key === '2') {
+      event.preventDefault();
+      this.setView('inbox');
+      return;
+    }
+
+    if ((event.metaKey || event.ctrlKey) && key === '3') {
+      event.preventDefault();
+      this.setView('agent');
+      return;
+    }
+
+    if ((event.metaKey || event.ctrlKey) && key === 'n' && this.currentView === 'chat') {
+      event.preventDefault();
+      this.startNewChatThread();
+      return;
+    }
+
+    if (event.key === '?' && !this.isTypingContext(event.target)) {
+      event.preventDefault();
+      this.showShortcutsModal = true;
+      return;
+    }
+
     if (event.key === 'Escape') {
-      if (this.showCommandPalette) {
-        this.closeCommandPalette();
+      if (this.isWorkspaceMenuOpen) {
+        this.isWorkspaceMenuOpen = false;
       } else if (this.showNewDecisionModal) {
         this.closeNewDecisionModal();
-      } else if (this.showArchiveModal) {
-        this.showArchiveModal = false;
+      } else if (this.showShortcutsModal) {
+        this.showShortcutsModal = false;
+      } else if (this.isSidebarOpen) {
+        this.toggleSidebar();
       } else if (this.searchQuery) {
         this.clearSearch();
       }
+    }
+  }
+
+  @HostListener('document:click', ['$event'])
+  handleDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target) {
       return;
     }
 
-    // Command palette navigation
-    if (this.showCommandPalette) {
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        this.selectedCommandIndex = Math.min(this.selectedCommandIndex + 1, this.commandResults.length - 1);
-      } else if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        this.selectedCommandIndex = Math.max(this.selectedCommandIndex - 1, 0);
-      } else if (event.key === 'Enter' && this.commandResults.length > 0) {
-        event.preventDefault();
-        this.executeCommand(this.selectedCommandIndex);
-      }
-    }
-
-    // / = Focus search
-    if (event.key === '/' && !this.isInputFocused()) {
-      event.preventDefault();
-      const searchInput = document.querySelector('.app-search input') as HTMLInputElement;
-      if (searchInput) searchInput.focus();
+    if (!target.closest('.workspace-wrap')) {
+      this.isWorkspaceMenuOpen = false;
     }
   }
 
-  isInputFocused(): boolean {
-    const active = document.activeElement;
-    return active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA';
-  }
-
-  // === Command Palette ===
-  toggleCommandPalette() {
-    this.showCommandPalette = !this.showCommandPalette;
-    if (this.showCommandPalette) {
-      this.commandQuery = '';
-      this.updateCommandResults();
-      this.selectedCommandIndex = 0;
-      setTimeout(() => {
-        const input = document.querySelector('.app-cmd-input') as HTMLInputElement;
-        if (input) input.focus();
-      }, 50);
+  dismissNotification(id: number): void {
+    this.notifications = this.notifications.filter(item => item.id !== id);
+    const timer = this.toastTimerById.get(id);
+    if (timer) {
+      window.clearTimeout(timer);
+      this.toastTimerById.delete(id);
     }
   }
 
-  closeCommandPalette() {
-    this.showCommandPalette = false;
-    this.commandQuery = '';
-    this.commandResults = [];
+  trackById(_index: number, item: { id: string }): string {
+    return item.id;
   }
 
-  updateCommandResults() {
-    const q = this.commandQuery.toLowerCase();
-    const allCommands = [
-      { icon: '📥', label: 'Go to Inbox', action: () => this.setView('inbox') },
-      { icon: '💬', label: 'Go to Chat', action: () => this.setView('chat') },
-      { icon: '📋', label: 'Go to Kanban', action: () => this.setView('kanban') },
-      { icon: '🏃', label: 'Go to Sprints', action: () => this.setView('sprints') },
-      { icon: '⚡', label: 'Go to Automations', action: () => this.setView('automations') },
-      { icon: '🔗', label: 'Go to Integrations', action: () => this.setView('integrations') },
-      { icon: '📊', label: 'Go to Reports', action: () => this.setView('reports') },
-      { icon: '⚙️', label: 'Go to Settings', action: () => this.setView('settings') },
-      { icon: '➕', label: 'New Decision', action: () => this.openNewDecisionModal() },
-      { icon: '🌙', label: 'Toggle Dark Mode', action: () => this.toggleTheme() },
-      { icon: '📦', label: 'View Archive', action: () => this.openArchiveModal() },
-      { icon: '📤', label: 'Export Decisions to CSV', action: () => this.exportDecisionsCSV() },
-      { icon: '🗑️', label: 'Clear Chat History', action: () => this.clearChat() },
-    ];
+  private composeAssistantReply(prompt: string): string {
+    const lower = prompt.toLowerCase();
 
-    this.commandResults = q
-      ? allCommands.filter(c => c.label.toLowerCase().includes(q))
-      : allCommands;
-    this.selectedCommandIndex = 0;
-  }
-
-  executeCommand(index: number) {
-    if (this.commandResults[index]) {
-      this.commandResults[index].action();
-      this.closeCommandPalette();
+    if (lower.includes('churn')) {
+      return 'Top churn driver is API throttling (38% of at-risk mentions). Recommended decision: ship adaptive enterprise rate limits this sprint, then sequence SSO reliability improvements next.';
     }
-  }
 
-  // === Theme Persistence ===
-  toggleTheme() {
-    this.isDarkMode = !this.isDarkMode;
-    if (this.isDarkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
+    if (lower.includes('draft') || lower.includes('decision')) {
+      return 'Draft recommendation: prioritize enterprise API limits first. Expected impact is reduced churn exposure with medium implementation complexity. I can format this into a decision card for review.';
     }
-    this.showNotification(`Switched to ${this.isDarkMode ? 'dark' : 'light'} mode`, 'info');
+
+    return 'Recommendation: act on the highest-confidence, highest-impact queue item. Current best candidate is "Launch self-serve enterprise tier" with 91% confidence and measurable ARR upside.';
   }
 
-  // === Decision Archive ===
-  openArchiveModal() {
-    this.showArchiveModal = true;
-  }
-
-  archiveDecision(index: number) {
-    const decision = this.decisionQueue[index];
-    if (decision) {
-      this.archivedDecisions.push({ ...decision, archivedAt: new Date().toISOString() });
-      this.decisionQueue.splice(index, 1);
-      this.updateKpis();
-      this.saveToLocalStorage();
-      this.showNotification(`"${decision.title}" archived`, 'info');
+  private promoteChatThread(threadId: string): void {
+    const currentIndex = this.chatThreads.findIndex(item => item.id === threadId);
+    if (currentIndex <= 0) {
+      return;
     }
+
+    const [thread] = this.chatThreads.splice(currentIndex, 1);
+    this.chatThreads.unshift(thread);
   }
 
-  restoreDecision(index: number) {
-    const decision = this.archivedDecisions[index];
-    if (decision) {
-      delete decision.archivedAt;
-      this.decisionQueue.push(decision);
-      this.archivedDecisions.splice(index, 1);
-      this.updateKpis();
-      this.saveToLocalStorage();
-      this.showNotification(`"${decision.title}" restored`, 'success');
+  private createThreadTitle(prompt: string): string {
+    const compact = prompt.replace(/\s+/g, ' ').trim();
+    if (compact.length <= 34) {
+      return compact;
     }
+    return `${compact.slice(0, 31)}...`;
   }
 
-  // === Export ===
-  exportDecisionsCSV() {
-    const headers = ['Title', 'Status', 'Owner', 'Confidence', 'Impact', 'Risk'];
-    const rows = this.decisionQueue.map(d => [
-      d.title, d.status, d.owner, d.confidence, d.impact, d.risk
-    ].map(v => `"${v}"`).join(','));
-
-    const csv = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `decisions-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    this.showNotification('Decisions exported to CSV', 'success');
+  private focusGlobalSearch(): void {
+    this.globalSearchInput?.nativeElement.focus();
+    this.globalSearchInput?.nativeElement.select();
   }
 
-  // === Local Storage Persistence ===
-  saveToLocalStorage() {
-    localStorage.setItem('sentinent-decisions', JSON.stringify(this.decisionQueue));
-    localStorage.setItem('sentinent-archive', JSON.stringify(this.archivedDecisions));
+  private applyThemeClass(): void {
+    document.documentElement.classList.toggle('dark', this.isDarkMode);
+    document.documentElement.setAttribute('data-sentinent-tone', this.toneMode);
   }
 
-  loadFromLocalStorage() {
-    try {
-      const decisions = localStorage.getItem('sentinent-decisions');
-      const archive = localStorage.getItem('sentinent-archive');
-      if (decisions) this.decisionQueue = JSON.parse(decisions);
-      if (archive) this.archivedDecisions = JSON.parse(archive);
-    } catch (e) {
-      console.error('Failed to load from localStorage:', e);
+  private showNotification(message: string, type: ToastType): void {
+    const id = ++this.toastCounter;
+    this.notifications.unshift({ id, message, type });
+
+    const timer = window.setTimeout(() => {
+      this.dismissNotification(id);
+    }, 3600);
+
+    this.toastTimerById.set(id, timer);
+  }
+
+  private initialsFor(name: string): string {
+    return name
+      .trim()
+      .split(/\s+/)
+      .map(part => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase();
+  }
+
+  private createId(prefix: string): string {
+    return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+  }
+
+  private isTypingContext(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) {
+      return false;
     }
-  }
-
-  // === View Transition Helper ===
-  setView(view: 'chat' | 'inbox' | 'kanban' | 'sprints' | 'automations' | 'integrations' | 'reports' | 'settings') {
-    this.currentView = view;
-    this.isSidebarOpen = false;
-    document.body.style.overflow = '';
-  }
-
-  // === Cleanup ===
-  ngOnDestroy() {
-    // Cleanup if needed
+    const tag = target.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
   }
 }
+

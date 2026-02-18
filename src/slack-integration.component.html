@@ -1,0 +1,201 @@
+<div class="slack-page">
+    <header class="slack-header">
+        <a routerLink="/app" class="slack-back">Back to App</a>
+        <h1>Slack Integration Setup</h1>
+        <p>Simple setup: add 3 Slack values, validate, then connect your workspace.</p>
+    </header>
+
+    <div class="slack-notice" *ngIf="notice.text" [ngClass]="'slack-notice-' + notice.type">
+        {{ notice.text }}
+    </div>
+
+    <section class="slack-card">
+        <div class="slack-card-header">
+            <h2>Connection Status</h2>
+            <button class="slack-btn slack-btn-ghost" (click)="refreshAll()" [disabled]="isLoading || actionBusy">
+                {{ isLoading ? 'Refreshing...' : 'Refresh' }}
+            </button>
+        </div>
+        <div class="slack-status-grid">
+            <div class="slack-status-item">
+                <div class="slack-label">Connection</div>
+                <div class="slack-value">{{ integration.status }}</div>
+            </div>
+            <div class="slack-status-item">
+                <div class="slack-label">Workspace</div>
+                <div class="slack-value">{{ setupStatus.workspace || 'Not connected' }}</div>
+            </div>
+            <div class="slack-status-item">
+                <div class="slack-label">Setup State</div>
+                <div class="slack-value">{{ setupStatus.readyForConnect ? 'Ready' : 'Incomplete' }}</div>
+            </div>
+        </div>
+        <div class="slack-actions">
+            <button class="slack-btn slack-btn-primary" (click)="connectSlack(true)"
+                [disabled]="actionBusy">
+                {{ authorizeButtonLabel }}
+            </button>
+            <button class="slack-btn slack-btn-danger" (click)="disconnectSlack()"
+                [disabled]="actionBusy || integration.status !== 'Connected'">
+                {{ actionBusy && integration.status === 'Connected' ? 'Disconnecting...' : 'Disconnect Slack' }}
+            </button>
+        </div>
+        <p class="slack-hint">
+            Clicking <strong>Authorize In Slack</strong> opens Slack consent with full default scopes and connects on return.
+        </p>
+    </section>
+
+    <section class="slack-card">
+        <div class="slack-card-header">
+            <h2>Select Channels To Integrate</h2>
+            <button class="slack-btn slack-btn-ghost" (click)="loadChannels()"
+                [disabled]="channelsBusy || integration.status !== 'Connected'">
+                {{ channelsBusy ? 'Loading...' : 'Load Channels' }}
+            </button>
+        </div>
+        <div class="slack-hint" *ngIf="integration.status !== 'Connected'">
+            Connect Slack first to load available channels.
+        </div>
+        <div *ngIf="integration.status === 'Connected'">
+            <div class="slack-toolbar">
+                <input type="text" [(ngModel)]="channelFilter" placeholder="Search channels..." />
+                <div class="slack-actions">
+                    <button class="slack-btn slack-btn-ghost" (click)="toggleAllChannels(true)"
+                        [disabled]="channels.length === 0">Select All</button>
+                    <button class="slack-btn slack-btn-ghost" (click)="toggleAllChannels(false)"
+                        [disabled]="channels.length === 0">Clear</button>
+                </div>
+            </div>
+            <div class="slack-meta-row">
+                <span>Total: {{ channels.length }}</span>
+                <span>Selected: {{ selectedChannelsCount }}</span>
+            </div>
+            <div class="slack-channel-list">
+                <label class="slack-channel-item" *ngFor="let channel of filteredChannels">
+                    <input type="checkbox" [(ngModel)]="channel.selected" />
+                    <div class="slack-channel-main">
+                        <div class="slack-channel-name">#{{ channel.name }}</div>
+                        <div class="slack-channel-meta">
+                            <span>{{ channel.isPrivate ? 'Private' : 'Public' }}</span>
+                            <span *ngIf="channel.numMembers">Members: {{ channel.numMembers }}</span>
+                            <span>{{ channel.isMember ? 'App Joined' : 'Not Joined' }}</span>
+                        </div>
+                    </div>
+                </label>
+                <div class="slack-hint" *ngIf="filteredChannels.length === 0 && channels.length > 0">No channels match
+                    this search.</div>
+                <div class="slack-hint" *ngIf="channels.length === 0 && !channelsBusy">No channels loaded yet. Click
+                    <strong>Load Channels</strong>.</div>
+            </div>
+            <div class="slack-actions">
+                <button class="slack-btn slack-btn-primary" (click)="saveChannelSelection()"
+                    [disabled]="saveChannelsBusy || channels.length === 0">
+                    {{ saveChannelsBusy ? 'Saving...' : 'Save Selected Channels' }}
+                </button>
+                <button class="slack-btn slack-btn-primary" (click)="importSelectedChannels()"
+                    [disabled]="importBusy || selectedChannelsCount === 0">
+                    {{ importBusy ? 'Importing...' : 'Fetch Data From Selected Channels' }}
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section class="slack-card">
+        <div class="slack-card-header">
+            <h2>Fetched Slack Signals</h2>
+            <button class="slack-btn slack-btn-ghost" (click)="loadSignals()" [disabled]="signalsBusy">
+                {{ signalsBusy ? 'Refreshing...' : 'Refresh Data' }}
+            </button>
+        </div>
+        <div class="slack-hint" *ngIf="signals.length === 0 && !signalsBusy">
+            No Slack data available yet. Select channels and click <strong>Fetch Data From Selected Channels</strong>.
+        </div>
+        <div class="slack-signals-list" *ngIf="signals.length > 0">
+            <article class="slack-signal-item" *ngFor="let signal of signals">
+                <div class="slack-signal-title">{{ signal.title }}</div>
+                <div class="slack-signal-summary">{{ signal.summary }}</div>
+                <div class="slack-signal-meta">
+                    <span *ngIf="signal.channelName">#{{ signal.channelName }}</span>
+                    <span *ngIf="!signal.channelName && signal.channelID">{{ signal.channelID }}</span>
+                    <span>{{ formatSignalTime(signal.occurredAt) }}</span>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section class="slack-card">
+        <div class="slack-card-header">
+            <h2>Quick Setup</h2>
+        </div>
+        <div class="slack-checklist">
+            <div>1. Paste Slack Client ID, Client Secret, and Signing Secret.</div>
+            <div>2. Click <strong>Save Setup</strong>, then <strong>Validate Setup</strong>.</div>
+            <div>3. Click <strong>Authorize In Slack</strong> above.</div>
+        </div>
+        <div class="slack-form-grid">
+            <label>
+                Slack Client ID
+                <input type="text" [(ngModel)]="setupForm.clientId" placeholder="1234567890.1234567890" />
+            </label>
+            <label>
+                Slack Client Secret
+                <input type="password" [(ngModel)]="setupForm.clientSecret"
+                    [placeholder]="setupMeta.hasClientSecret ? 'Saved (leave blank to keep)' : 'Enter client secret'" />
+            </label>
+            <label>
+                Slack Signing Secret
+                <input type="password" [(ngModel)]="setupForm.signingSecret"
+                    [placeholder]="setupMeta.hasSigningSecret ? 'Saved (leave blank to keep)' : 'Enter signing secret'" />
+            </label>
+        </div>
+        <div class="slack-meta-row">
+            <span *ngIf="setupMeta.updatedAt">Last updated: {{ setupMeta.updatedAt }}</span>
+            <span *ngIf="setupStatus.missingFields.length > 0">
+                Missing: {{ missingFieldsFriendly }}
+            </span>
+        </div>
+        <div class="slack-actions">
+            <button class="slack-btn slack-btn-primary" (click)="saveSetup()" [disabled]="saveBusy">
+                {{ saveBusy ? 'Saving...' : 'Save Setup' }}
+            </button>
+            <button class="slack-btn slack-btn-ghost" (click)="validateSetup()" [disabled]="validateBusy">
+                {{ validateBusy ? 'Validating...' : 'Validate Setup' }}
+            </button>
+        </div>
+    </section>
+
+    <section class="slack-card">
+        <div class="slack-card-header">
+            <h2>Copy These Into Slack App</h2>
+            <button class="slack-btn slack-btn-ghost" (click)="copySlackConfigBundle()">Copy All</button>
+        </div>
+        <p class="slack-hint">
+            Use <strong>Copy All</strong> and paste into Slack app settings. You do not need to edit URLs manually.
+        </p>
+        <details class="slack-advanced">
+            <summary>Show individual values</summary>
+            <div class="slack-copy-row">
+                <label>OAuth Redirect URL</label>
+                <input type="text" [value]="autoConfig.redirectUrl" readonly />
+                <button class="slack-btn slack-btn-ghost" (click)="copyValue(autoConfig.redirectUrl)">Copy</button>
+            </div>
+            <div class="slack-copy-row">
+                <label>Event Request URL</label>
+                <input type="text" [value]="webhookUrl" readonly />
+                <button class="slack-btn slack-btn-ghost" (click)="copyValue(webhookUrl)">Copy</button>
+            </div>
+            <div class="slack-copy-row">
+                <label>Bot Scopes</label>
+                <input type="text" [value]="autoConfig.botScopes" readonly />
+                <button class="slack-btn slack-btn-ghost" (click)="copyValue(autoConfig.botScopes)">Copy</button>
+            </div>
+        </details>
+        <p class="slack-hint">
+            URLs and scopes are auto-generated. You only provide the three Slack secrets.
+        </p>
+        <div class="slack-actions">
+            <a href="https://api.slack.com/apps" target="_blank" rel="noopener" class="slack-btn slack-btn-primary"
+                style="text-decoration:none;">Open Slack Apps</a>
+        </div>
+    </section>
+</div>

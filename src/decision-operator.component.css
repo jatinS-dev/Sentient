@@ -1,0 +1,315 @@
+:host {
+  display: block;
+  min-height: 100dvh;
+  font-family: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --op-bg-primary: #f2eee6;
+  --op-bg-secondary: #fbf8f2;
+  --op-bg-tertiary: #efe8dc;
+  --op-surface: #fffcf6;
+  --op-text: #1a1712;
+  --op-text-secondary: #4f4840;
+  --op-text-muted: #73685b;
+  --op-border: #ddd4c6;
+  --op-border-strong: #bcae9a;
+  --op-accent: #1c2433;
+  --op-accent-hover: #111827;
+  --op-danger: #b91c1c;
+  --op-success: #15803d;
+  --op-info: #1d4ed8;
+  --op-ring: rgba(28, 36, 51, 0.2);
+  --op-shadow: 0 10px 24px -18px rgba(16, 24, 40, 0.28);
+}
+
+:host-context(.dark) {
+  --op-bg-primary: #06090f;
+  --op-bg-secondary: #0f141d;
+  --op-bg-tertiary: #182130;
+  --op-surface: #111925;
+  --op-text: #e8edf7;
+  --op-text-secondary: #b6c1d5;
+  --op-text-muted: #8d9db7;
+  --op-border: #1d2a3d;
+  --op-border-strong: #2a3a53;
+  --op-accent: #d9e5ff;
+  --op-accent-hover: #b8cbf3;
+  --op-danger: #f87171;
+  --op-success: #4ade80;
+  --op-info: #60a5fa;
+  --op-ring: rgba(217, 229, 255, 0.22);
+  --op-shadow: 0 12px 28px -20px rgba(6, 9, 15, 0.8);
+}
+
+.operator-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
+  color: var(--op-text);
+}
+
+.operator-header {
+  margin-bottom: 16px;
+}
+
+.operator-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: var(--op-info);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.operator-back:hover {
+  text-decoration: underline;
+}
+
+.operator-header h1 {
+  margin: 10px 0 6px;
+  font-size: clamp(30px, 3.8vw, 44px);
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+}
+
+.operator-header p {
+  margin: 0;
+  color: var(--op-text-secondary);
+  font-size: 16px;
+}
+
+.operator-health {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--op-text-muted);
+}
+
+.operator-notice,
+.operator-error {
+  border-radius: 12px;
+  padding: 11px 13px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+
+.operator-notice {
+  color: color-mix(in srgb, var(--op-success) 88%, var(--op-text));
+  background: color-mix(in srgb, var(--op-success) 13%, var(--op-bg-secondary));
+  border-color: color-mix(in srgb, var(--op-success) 32%, var(--op-border));
+}
+
+.operator-error {
+  color: color-mix(in srgb, var(--op-danger) 86%, var(--op-text));
+  background: color-mix(in srgb, var(--op-danger) 11%, var(--op-bg-secondary));
+  border-color: color-mix(in srgb, var(--op-danger) 36%, var(--op-border));
+}
+
+.operator-card {
+  border: 1px solid var(--op-border);
+  border-radius: 16px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--op-bg-secondary) 92%, transparent),
+    var(--op-bg-secondary)
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), var(--op-shadow);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.operator-card h2,
+.operator-card h3,
+.operator-card h4 {
+  margin: 0 0 10px;
+  color: var(--op-text);
+}
+
+.operator-card h3 {
+  font-size: 24px;
+  letter-spacing: -0.01em;
+}
+
+.operator-grid {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.operator-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.jira-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.run-create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--op-text-muted);
+}
+
+input,
+button {
+  font: inherit;
+}
+
+input {
+  width: 100%;
+  background: color-mix(in srgb, var(--op-bg-tertiary) 78%, var(--op-bg-secondary));
+  border: 1px solid var(--op-border);
+  color: var(--op-text);
+  border-radius: 10px;
+  padding: 10px 11px;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+input::placeholder {
+  color: var(--op-text-muted);
+}
+
+input:focus-visible,
+button:focus-visible,
+.operator-back:focus-visible {
+  outline: none;
+  border-color: var(--op-accent);
+  box-shadow: 0 0 0 2px var(--op-ring);
+}
+
+button {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--op-accent);
+  color: var(--op-surface);
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.2s, border-color 0.2s;
+}
+
+button:hover {
+  background: var(--op-accent-hover);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button.ghost {
+  background: color-mix(in srgb, var(--op-bg-tertiary) 72%, transparent);
+  color: var(--op-text-secondary);
+  border-color: var(--op-border);
+}
+
+button.ghost:hover {
+  border-color: var(--op-border-strong);
+  background: color-mix(in srgb, var(--op-bg-tertiary) 88%, transparent);
+}
+
+button:disabled {
+  opacity: 0.58;
+  cursor: default;
+  transform: none;
+}
+
+.runs-list {
+  display: grid;
+  gap: 8px;
+}
+
+.run-item {
+  width: 100%;
+  text-align: left;
+  background: color-mix(in srgb, var(--op-bg-tertiary) 72%, var(--op-bg-secondary));
+  border: 1px solid var(--op-border);
+  color: var(--op-text);
+}
+
+.run-item:hover {
+  border-color: var(--op-border-strong);
+}
+
+.run-item.active {
+  border-color: color-mix(in srgb, var(--op-accent) 26%, var(--op-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--op-accent) 22%, transparent) inset;
+}
+
+.run-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.run-meta {
+  font-size: 12px;
+  color: var(--op-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.detail-wrap pre {
+  background: color-mix(in srgb, var(--op-bg-tertiary) 76%, var(--op-bg-secondary));
+  border: 1px solid var(--op-border);
+  border-radius: 9px;
+  padding: 10px;
+  overflow: auto;
+  max-height: 280px;
+  font-size: 12px;
+  color: var(--op-text-secondary);
+}
+
+.detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.tag {
+  border: 1px solid var(--op-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--op-text-secondary);
+  background: color-mix(in srgb, var(--op-bg-tertiary) 68%, transparent);
+}
+
+.tone-success {
+  color: var(--op-success);
+}
+
+.tone-danger {
+  color: var(--op-danger);
+}
+
+.tone-info {
+  color: var(--op-info);
+}
+
+@media (max-width: 980px) {
+  .operator-page {
+    padding: 14px;
+  }
+
+  .operator-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .run-create-row,
+  .jira-grid {
+    grid-template-columns: 1fr;
+  }
+}

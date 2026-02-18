@@ -15,6 +15,7 @@ yarn-error.log*
 # Environment files
 .env
 .env.*
+backend/data/
 
 # OS files
 .DS_Store

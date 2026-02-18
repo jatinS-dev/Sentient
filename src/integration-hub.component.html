@@ -1,0 +1,66 @@
+<div class="integration-page">
+    <header class="integration-header">
+        <a routerLink="/app" class="integration-back">Back to App</a>
+        <h1>Integration Center</h1>
+        <p>Connect, monitor, and manage external systems that feed Sentient signals.</p>
+    </header>
+
+    <section class="integration-overview">
+        <article class="overview-card overview-card-primary">
+            <div class="overview-label">Connected</div>
+            <div class="overview-value">{{ connectedCount }}</div>
+        </article>
+        <article class="overview-card">
+            <div class="overview-label">Not Connected</div>
+            <div class="overview-value">{{ disconnectedCount }}</div>
+        </article>
+        <article class="overview-card">
+            <div class="overview-label">Total Integrations</div>
+            <div class="overview-value">{{ integrations.length }}</div>
+        </article>
+    </section>
+
+    <div class="integration-alert" *ngIf="error">{{ error }}</div>
+
+    <section class="integration-panel">
+        <div class="integration-panel-head">
+            <h2>Available Integrations</h2>
+            <div style="display:flex; gap:8px;">
+                <a class="integration-btn" routerLink="/app/decision-operator">Open Decision Operator</a>
+                <button class="integration-btn integration-btn-ghost" type="button" (click)="refreshIntegrations()"
+                    [disabled]="loading">
+                    {{ loading ? 'Refreshing...' : 'Refresh' }}
+                </button>
+            </div>
+        </div>
+
+        <div class="integration-grid">
+            <article class="integration-card" *ngFor="let integration of integrations; trackBy: trackByProvider">
+                <div class="integration-card-head">
+                    <h3>{{ integration.name }}</h3>
+                    <span class="integration-pill" [ngClass]="'pill-' + statusTone(integration.status)">
+                        {{ integration.status }}
+                    </span>
+                </div>
+
+                <p>{{ integration.detail }}</p>
+
+                <div class="integration-card-foot">
+                    <span class="integration-meta" *ngIf="integration.connectedAt">
+                        Connected {{ formatConnectedAt(integration.connectedAt) }}
+                    </span>
+                    <span class="integration-meta" *ngIf="!integration.connectedAt">
+                        Provider: {{ integration.provider || integration.name }}
+                    </span>
+                    <a *ngIf="isSlackIntegration(integration)" routerLink="/app/integration/slack" class="integration-btn">
+                        {{ integration.status === 'Connected' ? 'Manage Slack' : 'Setup Slack' }}
+                    </a>
+                    <button *ngIf="!isSlackIntegration(integration)" class="integration-btn integration-btn-ghost"
+                        type="button" disabled>
+                        {{ integration.status === 'Connected' ? 'Connected' : 'Coming Soon' }}
+                    </button>
+                </div>
+            </article>
+        </div>
+    </section>
+</div>

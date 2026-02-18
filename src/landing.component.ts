@@ -1,4 +1,4 @@
-import { Component, AfterViewInit } from '@angular/core';
+import { Component, AfterViewInit, OnDestroy } from '@angular/core';
 import emailjs from '@emailjs/browser';
 
 @Component({
@@ -7,17 +7,17 @@ import emailjs from '@emailjs/browser';
   templateUrl: './landing.component.html',
   styleUrls: []
 })
-export class LandingComponent implements AfterViewInit {
+export class LandingComponent implements AfterViewInit, OnDestroy {
   botResponses: Record<string, string> = {
-    "What should we build next?": "Based on current signal analysis, I recommend prioritizing **'Advanced Filtering'**. \n\n**Evidence:**\n• 42 enterprise tickets mention inability to segment data.\n• Competitor analysis shows this as a key differentiator.\n• Estimated impact: +$1.2M ARR.\n\nShall I draft the decision object?",
-    "Analyze churn risk for Q3": "Churn risk is **elevated** (12% vs 8% baseline).\n\n**Key Drivers:**\n1. Onboarding friction (Step 3 drop-off +15%).\n2. Lack of API webhook documentation.\n\n**Recommendation:** Immediate sprint allocation to onboarding flow redesign.",
-    "Prioritize the backlog": "Backlog prioritized by **Revenue Impact / Effort**:\n\n1. **#402** Payment Retry Logic (High Impact, Low Effort)\n2. **#415** SAML SSO (High Impact, High Effort)\n3. **#389** Dark Mode (Low Impact, Low Effort)\n\n*Note: #389 was deprioritized despite high vote count due to low revenue correlation.*"
+    "Capture a decision from this Slack thread": "Decision object created: **Delay Feature X rollout**.\n\n**Signals detected:**\n- Retention trend down 9% week-over-week.\n- 17 customer complaints tied to onboarding friction.\n\n**Assumption captured:**\n- Feature X will improve retention for SMB users.\n\n**Success criteria:**\n- SMB week-4 retention recovers to >= 42% within 30 days.\n\nDo you want to move this to owner review?",
+    "What changed this week that matters?": "Weekly synthesis complete.\n\n**Top changes:**\n1. Onboarding friction mentions increased 12% among SMB accounts.\n2. API throttling complaints appeared in 3 enterprise expansion deals.\n3. PR review wait time increased from 9h to 16h.\n\n**Recommendation:** trigger investigation for onboarding and elevate API reliability decision.",
+    "Check assumptions from the pricing decision": "Assumption review complete for **Pricing Increase - Q1**.\n\n**Tracked assumption:** conversion rate impact will be <= 2%.\n**Observed outcome:** conversion dropped **8%** after rollout.\n\nStatus: **Assumption invalidated**.\n\nRecommended action: re-open decision and run rollback simulation."
   };
 
   demoQueries = [
-    "What should we build next?",
-    "Analyze churn risk for Q3",
-    "Prioritize the backlog"
+    "Capture a decision from this Slack thread",
+    "What changed this week that matters?",
+    "Check assumptions from the pricing decision"
   ];
   currentDemoIndex = 0;
   isDemoRunning = false;
@@ -179,7 +179,7 @@ export class LandingComponent implements AfterViewInit {
         </div>
         <div class="flex items-center gap-2 text-[var(--muted)] text-xs font-mono">
             <span class="w-2 h-2 bg-[var(--brand)] rounded-full animate-pulse"></span>
-            Consulting Decision Graph...
+            Running autonomous agent loop...
         </div>
     `;
     chatMessages.appendChild(typingDiv);
@@ -187,7 +187,7 @@ export class LandingComponent implements AfterViewInit {
 
     setTimeout(() => {
       typingDiv.remove();
-      const response = this.botResponses[inputText] || "I need more data to answer that accurately. Please connect your Intercom or Zendesk integration.";
+      const response = this.botResponses[inputText] || "No decision could be created yet. Connect Slack, Jira, and metrics so I can validate evidence and assumptions.";
       const msgDiv = this.addMessage('', 'bot');
       const textContainer = msgDiv?.querySelector('.typing-cursor') as HTMLElement;
       if (textContainer) this.typeWriter(textContainer, response);
@@ -216,7 +216,7 @@ export class LandingComponent implements AfterViewInit {
     this.isDemoRunning = true;
     const query = this.demoQueries[this.currentDemoIndex];
 
-    const chatInput = document.querySelector('input[placeholder="Ask what to build next..."]') as HTMLInputElement;
+    const chatInput = document.querySelector('input[placeholder="Submit signal or trigger an agent run..."]') as HTMLInputElement;
     if (!chatInput) return;
 
     chatInput.value = '';
@@ -245,6 +245,8 @@ export class LandingComponent implements AfterViewInit {
   }
 
   ngAfterViewInit() {
+    document.body.classList.add('landing-cursor-enabled');
+
     if (localStorage.getItem('theme') === 'dark') {
       document.documentElement.classList.add('dark');
     }
@@ -1038,4 +1040,10 @@ function drawCompiler() {
 
 drawCompiler();
   }
+
+  ngOnDestroy() {
+    document.body.classList.remove('landing-cursor-enabled', 'hovering', 'dragging');
+  }
 }
+
+

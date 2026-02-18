@@ -1,813 +1,776 @@
-<div class="app-shell min-h-screen bg-[var(--bg)] text-[var(--fg)]">
-    <div class="app-topbar">
-        <div class="app-topbar-inner max-w-7xl mx-auto px-6">
-            <div class="flex items-center gap-3">
-                <button class="app-icon-btn lg:hidden" (click)="toggleSidebar()" aria-label="Open sidebar">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M4 6h16M4 12h16M4 18h16"></path>
-                    </svg>
+<div class="studio-root" [class.sidebar-open]="isSidebarOpen" [class.sidebar-hidden]="isSidebarHiddenDesktop">
+  <header class="top-nav" role="banner">
+    <div class="top-nav-inner">
+      <div class="top-nav-left">
+        <button
+          class="icon-btn sidebar-toggle-btn"
+          type="button"
+          (click)="toggleSidebar()"
+          [attr.aria-label]="isSidebarHiddenDesktop ? 'Show sidebar' : 'Hide sidebar'"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
+        <div class="brand" aria-label="Sentinent Decision Studio">
+          <div class="brand-text">
+            <p class="brand-kicker">Sentinent</p>
+            <p class="brand-title">Decision Studio</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="top-nav-center desktop-only">
+        <div class="global-search app-search">
+          <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="M21 21l-4.35-4.35"></path>
+          </svg>
+          <input
+            #globalSearchInput
+            type="text"
+            [(ngModel)]="searchQuery"
+            (input)="onSearch(searchQuery)"
+            placeholder="Search decisions, signals, owners..."
+            aria-label="Global search"
+          />
+          <kbd class="kbd">Ctrl+K</kbd>
+
+          <div class="search-dropdown" *ngIf="searchResults.length > 0">
+            <button
+              type="button"
+              class="search-result"
+              *ngFor="let result of searchResults; trackBy: trackById"
+              (click)="useSearchResult(result)"
+            >
+              <span class="result-type">{{ result.type }}</span>
+              <span class="result-title">{{ result.title }}</span>
+              <span class="result-subtitle">{{ result.subtitle }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="top-nav-right">
+        <button type="button" class="primary-btn desktop-only" (click)="openNewDecisionModal()">
+          New Decision
+        </button>
+
+        <button class="icon-btn nav-theme-btn" type="button" (click)="toggleTheme()" aria-label="Toggle color theme">
+          <svg *ngIf="!isDarkMode" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1111.21 3c0 .02 0 .05-.01.07A7 7 0 0021 12.79z" />
+          </svg>
+          <svg *ngIf="isDarkMode" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 4V2m0 20v-2m8-8h2M2 12h2m12.95 6.95l1.41 1.41M3.64 3.64l1.41 1.41m11.9 0l1.41-1.41M3.64 20.36l1.41-1.41M12 7a5 5 0 100 10 5 5 0 000-10z" />
+          </svg>
+        </button>
+
+        <button type="button" class="icon-btn mobile-only" (click)="openNewDecisionModal()" aria-label="Create new decision">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+
+        <clerk-user-button></clerk-user-button>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell">
+    <div class="sidebar-overlay" *ngIf="isSidebarOpen" (click)="toggleSidebar()" aria-hidden="true"></div>
+
+    <aside class="sidebar" [class.sidebar-open]="isSidebarOpen" aria-label="Primary navigation">
+      <section class="sidebar-section">
+        <p class="sidebar-label">Workspace</p>
+        <div class="workspace-wrap">
+          <button
+            class="workspace-btn"
+            type="button"
+            [class.open]="isWorkspaceMenuOpen"
+            [attr.aria-expanded]="isWorkspaceMenuOpen"
+            aria-haspopup="menu"
+            aria-label="Select workspace"
+            (click)="toggleWorkspaceMenu()"
+          >
+            <span>{{ activeWorkspaceName }}</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+          </button>
+
+          <div class="workspace-menu" *ngIf="isWorkspaceMenuOpen" role="menu" aria-label="Workspace list">
+            <button
+              type="button"
+              class="workspace-option"
+              *ngFor="let workspace of workspaceOptions; trackBy: trackById"
+              [class.active]="workspace.id === selectedWorkspaceId"
+              (click)="selectWorkspace(workspace.id)"
+            >
+              <span>{{ workspace.name }}</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="sidebar-section">
+        <p class="sidebar-label">Platform</p>
+        <nav class="sidebar-nav" aria-label="Platform navigation">
+          <button
+            type="button"
+            class="nav-item"
+            *ngFor="let option of viewOptions"
+            [class.active]="currentView === option.key"
+            (click)="setView(option.key)"
+          >
+            <span class="nav-main">{{ option.label }}</span>
+            <span class="nav-meta" *ngIf="option.shortcut">{{ option.shortcut }}</span>
+            <span class="unread-pill" *ngIf="option.unread">{{ inboxUnreadCount }}</span>
+          </button>
+        </nav>
+      </section>
+
+      <section class="sidebar-section">
+        <p class="sidebar-label">Operations</p>
+        <nav class="sidebar-nav" aria-label="Operations navigation">
+          <button
+            type="button"
+            class="nav-item"
+            *ngFor="let option of operationsOptions"
+            [class.active]="currentView === option.key"
+            (click)="setView(option.key)"
+          >
+            <span class="nav-main">{{ option.label }}</span>
+            <span class="disconnected-dot" *ngIf="option.disconnected && hasDisconnectedIntegrations" aria-hidden="true"></span>
+          </button>
+        </nav>
+      </section>
+
+      <section class="alert-card" aria-label="Risk alert">
+        <p class="alert-title">Churn Risk</p>
+        <p class="alert-text">3 enterprise accounts flagged</p>
+        <button type="button" class="alert-link" (click)="setView('inbox')">Review now -></button>
+      </section>
+
+      <footer class="sidebar-footer" aria-live="polite">
+        <span class="live-dot"></span>
+        <span>System compiling signals</span>
+      </footer>
+    </aside>
+
+    <main class="main-content" role="main">
+      <section class="chat-view" *ngIf="currentView === 'chat'">
+        <aside class="chat-list-panel" aria-label="Chat threads">
+          <header class="panel-header">
+            <div>
+              <h2 class="panel-title">Chats</h2>
+              <p class="panel-subtitle">Recent conversations in your workspace.</p>
+            </div>
+            <button type="button" class="chip-btn ghost" (click)="startNewChatThread()">New</button>
+          </header>
+
+          <div class="chat-thread-tools">
+            <input
+              class="input"
+              type="text"
+              [(ngModel)]="chatThreadSearch"
+              placeholder="Search chats..."
+              aria-label="Search chats"
+            />
+          </div>
+
+          <div class="chat-thread-list" *ngIf="filteredChatThreads.length > 0; else noChatThreads">
+            <button
+              type="button"
+              class="chat-thread-item"
+              *ngFor="let thread of filteredChatThreads; trackBy: trackById"
+              [class.active]="thread.id === activeChatThreadId"
+              (click)="openChatThread(thread.id)"
+            >
+              <span class="chat-thread-title">{{ thread.title }}</span>
+              <span class="chat-thread-preview">{{ thread.preview || 'No messages yet' }}</span>
+              <span class="chat-thread-time">{{ thread.updatedAt }}</span>
+            </button>
+          </div>
+
+          <ng-template #noChatThreads>
+            <div class="chat-thread-empty">No chats found.</div>
+          </ng-template>
+        </aside>
+
+        <section class="chat-panel claude-chat-panel" aria-label="Decision chat">
+          <header class="panel-header chat-header">
+            <div>
+              <h1 class="panel-title">{{ activeChatThread.title }}</h1>
+              <p class="panel-subtitle">Ask Sentient. Get a decision-ready answer.</p>
+            </div>
+            <button type="button" class="chip-btn ghost">Share</button>
+          </header>
+
+          <div class="chat-empty-state" *ngIf="chatIsEmpty">
+            <p class="chat-empty-pill">Free plan - Upgrade</p>
+            <h2>Good {{ chatGreetingPeriod }}, Jatin</h2>
+            <p>Type / for commands or ask Sentient to map your next product move.</p>
+          </div>
+
+          <div class="messages chat-live" role="log" aria-live="polite" *ngIf="!chatIsEmpty">
+            <article class="message" *ngFor="let message of chatMessages; trackBy: trackById" [class.message-user]="message.role === 'user'">
+              <div class="avatar">{{ message.role === 'user' ? 'YO' : 'SNT' }}</div>
+              <div class="bubble">
+                <div class="message-meta">
+                  <span class="message-name">{{ message.name }}</span>
+                  <span>{{ message.timestamp }}</span>
+                </div>
+                <p class="message-content">{{ message.content }}</p>
+                <div class="citations" *ngIf="message.citations?.length">
+                  <span class="citation" *ngFor="let cite of message.citations">{{ cite }}</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="message" *ngIf="chatIsLoading" aria-live="polite">
+              <div class="avatar">SNT</div>
+              <div class="bubble typing-bubble">
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+              </div>
+            </article>
+          </div>
+
+          <div class="suggestions-row" *ngIf="!chatIsEmpty">
+            <button type="button" class="chip-btn" *ngFor="let suggestion of chatSuggestions" (click)="useSuggestion(suggestion)">
+              {{ suggestion }}
+            </button>
+            <button type="button" class="chip-btn ghost" *ngIf="chatMessages.length > 1" (click)="clearChat()">Clear Chat</button>
+            <button type="button" class="chip-btn ghost" *ngIf="chatMessages.length > 1" (click)="exportChat()">Export</button>
+          </div>
+
+          <footer class="composer" [class.composer-empty]="chatIsEmpty">
+            <div class="composer-input-wrap">
+              <textarea
+                class="composer-input"
+                [(ngModel)]="chatInput"
+                (keydown)="onChatKeydown($event)"
+                (input)="autoResizeTextarea($event)"
+                [disabled]="chatIsLoading"
+                rows="1"
+                [placeholder]="chatIsEmpty ? 'Type / for commands' : 'Reply...'"
+                aria-label="Decision chat input"
+              ></textarea>
+              <button type="button" class="send-btn" (click)="sendChat()" [disabled]="chatIsLoading" aria-label="Send message">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+              </button>
+            </div>
+            <div class="composer-footer">
+              <span>AI responses may contain mistakes. Verify before execution.</span>
+              <span>Enter to send</span>
+            </div>
+          </footer>
+        </section>
+      </section>
+      <section class="inbox-view" *ngIf="currentView === 'inbox'">
+        <div class="kpi-grid">
+          <article class="kpi-card" *ngFor="let card of kpiCards">
+            <p class="kpi-label">{{ card.label }}</p>
+            <p class="kpi-value">{{ getKpiValue(card) }}</p>
+            <p class="kpi-trend" [class.trend-up]="card.direction === 'up'" [class.trend-down]="card.direction === 'down'">
+              <span>{{ kpiDirectionIcon(card.direction) }}</span>
+              {{ card.trend }}
+            </p>
+          </article>
+        </div>
+
+        <div class="inbox-grid">
+          <section class="surface-card">
+            <header class="card-head">
+              <h2>Decision Queue</h2>
+              <button type="button" class="chip-btn ghost">Priority: All</button>
+            </header>
+            <div class="queue-list">
+              <article
+                class="queue-item"
+                *ngFor="let decision of decisionQueue; trackBy: trackById"
+                [class.active]="decision.id === activeDecision.id"
+                (click)="selectDecision(decision.id)"
+              >
+                <div class="queue-main">
+                  <div class="queue-top">
+                    <span class="risk-dot" [ngClass]="riskClass(decision.risk)" aria-hidden="true"></span>
+                    <h3>{{ decision.title }}</h3>
+                  </div>
+                  <p class="queue-meta">{{ decision.owner }} - {{ decision.confidence }}% - {{ decision.impact }}</p>
+                  <p class="queue-description">{{ decision.description }}</p>
+                </div>
+                <span class="status-pill" [ngClass]="statusClass(decision.status)">{{ statusLabel(decision.status) }}</span>
+              </article>
+            </div>
+          </section>
+
+          <section class="surface-card detail-card">
+            <header class="card-head">
+              <h2>Decision Detail</h2>
+              <span class="chip-btn ghost">{{ activeDecision.confidence }}% confidence</span>
+            </header>
+            <div class="detail-block">
+              <p class="detail-label">Problem</p>
+              <p>{{ activeDecision.problem }}</p>
+            </div>
+            <div class="detail-block">
+              <p class="detail-label">Evidence</p>
+              <p>{{ activeDecision.evidence }}</p>
+            </div>
+            <div class="detail-block">
+              <p class="detail-label">Tradeoff</p>
+              <p>{{ activeDecision.tradeoff }}</p>
+            </div>
+            <div class="detail-options">
+              <p class="detail-label">Options</p>
+              <article class="option-card" *ngFor="let option of activeDecision.options">
+                <span class="option-radio" aria-hidden="true"></span>
+                <div>
+                  <h4>{{ option.title }}</h4>
+                  <p>{{ option.detail }}</p>
+                </div>
+              </article>
+            </div>
+            <footer class="detail-footer">{{ activeDecision.owner }} - {{ activeDecision.impact }}</footer>
+          </section>
+        </div>
+
+        <div class="inbox-grid bottom-grid">
+          <section class="surface-card">
+            <header class="card-head">
+              <h2>Signal Stream</h2>
+              <span class="chip-btn ghost">Auto-tagging on</span>
+            </header>
+            <div class="signal-list">
+              <article class="signal-item" *ngFor="let signal of signalStream; trackBy: trackById">
+                <div class="signal-icon">{{ signal.source.charAt(0) }}</div>
+                <div class="signal-body">
+                  <p class="signal-title">{{ signal.source }} - {{ signal.timestamp }}</p>
+                  <p class="signal-text">{{ signal.summary }}</p>
+                </div>
+              </article>
+            </div>
+            <footer class="signal-footer">98% normalized - View all signals</footer>
+          </section>
+
+          <section class="velocity-card">
+            <p class="velocity-value">24h</p>
+            <p class="velocity-label">Avg time to decision</p>
+            <div class="velocity-bars" aria-hidden="true">
+              <span></span><span></span><span></span><span></span>
+            </div>
+          </section>
+        </div>
+
+        <section class="surface-card timeline-card">
+          <header class="card-head">
+            <h2>Timeline</h2>
+          </header>
+          <div class="timeline-list">
+            <article class="timeline-item" *ngFor="let event of timelineEvents; trackBy: trackById">
+              <span class="timeline-dot" [class.timeline-success]="event.tone === 'success'" [class.timeline-warning]="event.tone === 'warning'"></span>
+              <div>
+                <h3>{{ event.title }}</h3>
+                <p>{{ event.detail }}</p>
+                <span>{{ event.time }}</span>
+              </div>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="agent-view" *ngIf="currentView === 'agent'">
+        <header class="view-head">
+          <div class="agent-title-row">
+            <h1>Feature Research Operator</h1>
+            <span class="chip-btn ghost demo-mode-badge" *ngIf="featureResearchDemoMode">DEMO MODE</span>
+          </div>
+          <p>Run live web research with TinyFish and generate a strict JSON Research Brief.</p>
+        </header>
+
+        <section class="surface-card agent-query-card">
+          <div class="agent-form-grid">
+            <div class="field">
+              <label for="research-feature" class="field-label">Feature *</label>
+              <input
+                id="research-feature"
+                class="input"
+                type="text"
+                [(ngModel)]="featureResearchForm.feature"
+                placeholder="Dark Mode"
+              />
+            </div>
+
+            <div class="field">
+              <label for="research-category" class="field-label">Category *</label>
+              <input
+                id="research-category"
+                class="input"
+                type="text"
+                [(ngModel)]="featureResearchForm.category"
+                placeholder="PM tools"
+              />
+            </div>
+
+            <div class="field">
+              <label for="research-persona" class="field-label">Persona (optional)</label>
+              <input
+                id="research-persona"
+                class="input"
+                type="text"
+                [(ngModel)]="featureResearchForm.persona"
+                placeholder="Product manager at startup"
+              />
+            </div>
+
+            <div class="field">
+              <label for="research-competitors" class="field-label">Competitors (comma-separated)</label>
+              <input
+                id="research-competitors"
+                class="input"
+                type="text"
+                [(ngModel)]="featureResearchForm.competitors"
+                placeholder="Linear, Jira, ClickUp"
+              />
+            </div>
+
+            <div class="field">
+              <label for="research-window" class="field-label">Time Window (days)</label>
+              <input
+                id="research-window"
+                class="input"
+                type="number"
+                min="7"
+                max="730"
+                [(ngModel)]="featureResearchForm.time_window_days"
+              />
+            </div>
+          </div>
+
+          <div class="agent-query-actions">
+            <button
+              type="button"
+              class="primary-btn"
+              (click)="startFeatureResearchRun()"
+              [disabled]="featureResearchIsSubmitting || !featureResearchForm.feature.trim() || !featureResearchForm.category.trim()"
+            >
+              {{ featureResearchIsSubmitting ? 'Starting...' : 'Run research' }}
+            </button>
+            <button
+              type="button"
+              class="chip-btn ghost"
+              (click)="featureResearchForm = { feature: '', category: '', persona: '', competitors: '', time_window_days: 180 }"
+            >
+              Clear
+            </button>
+          </div>
+        </section>
+
+        <section class="surface-card">
+          <header class="card-head">
+            <h2>Live Progress</h2>
+            <span class="chip-btn ghost" *ngIf="featureResearchRunId">Run: {{ featureResearchRunId }}</span>
+          </header>
+          <div class="agent-progress-grid">
+            <div class="agent-progress-item">
+              <p class="detail-label">Status</p>
+              <p>{{ featureResearchRun?.status || 'idle' }}</p>
+            </div>
+            <div class="agent-progress-item">
+              <p class="detail-label">Step</p>
+              <p>{{ featureResearchRun?.step || 'N/A' }}</p>
+            </div>
+            <div class="agent-progress-item">
+              <p class="detail-label">Pages Visited</p>
+              <p>{{ featureResearchRun?.progress?.pagesVisited || 0 }}</p>
+            </div>
+            <div class="agent-progress-item">
+              <p class="detail-label">Evidence</p>
+              <p>{{ featureResearchRun?.progress?.evidenceCount || 0 }}</p>
+            </div>
+            <div class="agent-progress-item">
+              <p class="detail-label">Themes</p>
+              <p>{{ featureResearchRun?.progress?.themesCount || 0 }}</p>
+            </div>
+          </div>
+          <p class="agent-error-text" *ngIf="featureResearchRun?.error">{{ featureResearchRun?.error }}</p>
+        </section>
+
+        <section class="surface-card">
+          <div class="agent-results-tabs">
+            <button type="button" class="chip-btn" [class.ghost]="featureResearchTab !== 'themes'" (click)="setFeatureResearchTab('themes')">Themes</button>
+            <button type="button" class="chip-btn" [class.ghost]="featureResearchTab !== 'evidence'" (click)="setFeatureResearchTab('evidence')">Evidence</button>
+            <button type="button" class="chip-btn" [class.ghost]="featureResearchTab !== 'brief'" (click)="setFeatureResearchTab('brief')">Brief</button>
+          </div>
+
+          <div *ngIf="featureResearchTab === 'themes'" class="agent-tab-body">
+            <div class="agent-empty-text" *ngIf="featureResearchThemes.length === 0">No themes yet.</div>
+            <article class="agent-theme-card" *ngFor="let theme of featureResearchThemes">
+              <h3>{{ theme.label }}</h3>
+              <p>Count: {{ theme.count }}</p>
+              <p>Confidence: {{ theme.confidence | number:'1.2-2' }}</p>
+            </article>
+          </div>
+
+          <div *ngIf="featureResearchTab === 'evidence'" class="agent-tab-body">
+            <div class="agent-empty-text" *ngIf="featureResearchEvidence.length === 0">No evidence collected yet.</div>
+            <div class="agent-evidence-table-wrap" *ngIf="featureResearchEvidence.length > 0">
+              <table class="agent-evidence-table">
+                <thead>
+                  <tr>
+                    <th>Source</th>
+                    <th>Snippet</th>
+                    <th>URL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let item of featureResearchEvidence">
+                    <td>{{ item.source_type }}</td>
+                    <td>{{ item.snippet }}</td>
+                    <td><a [href]="item.url" target="_blank" rel="noopener noreferrer">{{ item.url }}</a></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div *ngIf="featureResearchTab === 'brief'" class="agent-tab-body">
+            <div class="agent-empty-text" *ngIf="!featureResearchBrief">No brief generated yet.</div>
+            <div *ngIf="featureResearchBrief">
+              <p><strong>Feature:</strong> {{ featureResearchBrief.feature }}</p>
+              <p><strong>Category:</strong> {{ featureResearchBrief.category }}</p>
+              <p><strong>Priority:</strong> {{ featureResearchBrief.priority }}</p>
+              <p><strong>Confidence:</strong> {{ featureResearchBrief.confidence }}</p>
+              <p><strong>Summary:</strong> {{ featureResearchBrief.summary }}</p>
+              <details>
+                <summary>Raw JSON</summary>
+                <pre>{{ pretty(featureResearchBrief) }}</pre>
+              </details>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="kanban-view" *ngIf="currentView === 'kanban'">
+        <header class="view-head">
+          <h1>Kanban Board</h1>
+          <p>Drag decisions between stages to track execution and review load.</p>
+        </header>
+
+        <div class="kanban-scroll" role="list">
+          <section class="kanban-column" *ngFor="let column of kanbanColumns; trackBy: trackById" (dragover)="onDragOver($event)" (drop)="onDrop($event, column.id)">
+            <header class="kanban-column-head">
+              <h2>{{ column.title }}</h2>
+              <span class="wip-counter" [class.over-limit]="column.items.length > column.wipLimit">
+                {{ column.items.length }}/{{ column.wipLimit }} WIP
+              </span>
+            </header>
+
+            <div class="kanban-card-list" *ngIf="column.items.length; else emptyKanbanColumn">
+              <article
+                class="kanban-card"
+                *ngFor="let card of column.items; trackBy: trackById"
+                draggable="true"
+                (dragstart)="onDragStart($event, column.id, card.id)"
+              >
+                <h3>{{ card.title }}</h3>
+                <div class="kanban-meta">
+                  <span class="tag">{{ card.tag }}</span>
+                  <span class="priority">{{ card.priority }}</span>
+                </div>
+                <div class="assignee">{{ card.assignee }}</div>
+              </article>
+            </div>
+
+            <ng-template #emptyKanbanColumn>
+              <p class="kanban-empty">Drop cards here</p>
+            </ng-template>
+          </section>
+        </div>
+      </section>
+
+      <section class="settings-view" *ngIf="currentView === 'settings'">
+        <header class="view-head narrow">
+          <h1>Settings</h1>
+          <p>Manage organization behavior, Slack setup, and integration controls.</p>
+        </header>
+
+        <div class="settings-stack">
+          <section class="surface-card">
+            <header class="card-head"><h2>Organization Settings</h2></header>
+            <article class="setting-row" *ngFor="let setting of organizationSettings; let i = index">
+              <div>
+                <h3>{{ setting.title }}</h3>
+                <p>{{ setting.description }}</p>
+              </div>
+              <button
+                type="button"
+                class="toggle"
+                role="switch"
+                [attr.aria-checked]="setting.enabled"
+                [class.on]="setting.enabled"
+                (click)="toggleOrgSetting(i)"
+              >
+                <span></span>
+              </button>
+            </article>
+          </section>
+
+          <section class="surface-card">
+            <header class="card-head"><h2>Slack Setup</h2></header>
+            <div class="slack-status">
+              <p>Connection status: <strong>{{ integrations[0].status }}</strong></p>
+              <a class="inline-link" routerLink="/app/integration">Open integration center</a>
+              <span style="margin: 0 6px;">|</span>
+              <a class="inline-link" routerLink="/app/decision-operator">Open decision operator</a>
+            </div>
+          </section>
+
+          <section class="surface-card">
+            <header class="card-head"><h2>Integrations</h2></header>
+            <div class="integration-table" role="table" aria-label="Integration settings table">
+              <div class="integration-row header" role="row">
+                <span>Provider</span><span>Status</span><span>Events</span><span>Enabled</span>
+              </div>
+              <div class="integration-row" role="row" *ngFor="let integration of integrations; let i = index">
+                <span>{{ integration.name }}</span>
+                <span [class.integration-offline]="integration.status === 'Disconnected'">{{ integration.status }}</span>
+                <span>{{ integration.events }}</span>
+                <button
+                  type="button"
+                  class="toggle"
+                  role="switch"
+                  [attr.aria-checked]="integration.enabled"
+                  [class.on]="integration.enabled"
+                  (click)="toggleIntegration(i)"
+                  [attr.aria-label]="'Toggle ' + integration.name"
+                >
+                  <span></span>
                 </button>
-                <div class="app-logo">
-                    <div class="app-logo-mark">
-                        <svg width="18" height="18" viewBox="0 0 32 32" fill="currentColor">
-                            <rect x="4" y="6" width="20" height="8" rx="1.5" />
-                            <rect x="8" y="18" width="20" height="8" rx="1.5" />
-                        </svg>
-                    </div>
-                    <div>
-                        <div class="text-xs font-mono uppercase tracking-widest text-[var(--muted)]">Sentinent</div>
-                        <div class="text-lg font-semibold">Decision Studio</div>
-                    </div>
-                </div>
-                <span class="app-version-badge">v2.4</span>
-                <span class="app-live-badge"><span class="app-live-dot"></span>Live</span>
+              </div>
             </div>
-
-            <div class="app-search hidden md:flex" style="position: relative;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <path d="M21 21l-4.35-4.35"></path>
-                </svg>
-                <input type="text" placeholder="Search decisions, signals, owners..." [(ngModel)]="searchQuery"
-                    (input)="onSearch(searchQuery)" (keydown.escape)="clearSearch()" />
-                <span class="app-kbd">/</span>
-                <!-- Search Results Dropdown -->
-                <div class="app-search-results" *ngIf="searchResults.length > 0">
-                    <div class="app-search-result" *ngFor="let result of searchResults" (click)="clearSearch()">
-                        <span class="app-search-type">{{ result.type }}</span>
-                        <span class="app-search-title">{{ result.title }}</span>
-                        <span class="app-search-subtitle">{{ result.subtitle }}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex items-center gap-3">
-                <button class="app-pill" (click)="openNewDecisionModal()">New Decision</button>
-                <clerk-user-button></clerk-user-button>
-                <button class="app-icon-btn" (click)="toggleTheme()" aria-label="Toggle theme">
-                    <svg class="w-4 h-4 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
-                    <svg class="w-4 h-4 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                    </svg>
-                </button>
-                <a routerLink="/" class="app-link">Marketing</a>
-            </div>
+          </section>
         </div>
-    </div>
+      </section>
 
-    <div class="app-body max-w-7xl mx-auto px-6">
-        <div class="app-layout">
-            <div class="app-sidebar-overlay" *ngIf="isSidebarOpen" (click)="toggleSidebar()"></div>
-            <aside class="app-sidebar" [class.app-sidebar-open]="isSidebarOpen">
-                <div class="app-sidebar-section">
-                    <div class="app-sidebar-title">Workspaces</div>
-                    <div class="app-select">
-                        <span>Sentinent Labs</span>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M6 9l6 6 6-6"></path>
-                        </svg>
-                    </div>
-                </div>
+      <section class="fallback-view" *ngIf="currentView === 'sprints' || currentView === 'automations' || currentView === 'integrations' || currentView === 'reports'">
+        <article class="surface-card">
+          <h1>{{ currentView | titlecase }}</h1>
+          <p>This area is aligned with the new design system and ready for feature-specific content.</p>
+          <button type="button" class="primary-btn" (click)="setView('chat')">Back to Chat</button>
+        </article>
+      </section>
+    </main>
+  </div>
 
-                <div class="app-sidebar-section">
-                    <div class="app-sidebar-title">Chat</div>
-                    <nav class="app-nav">
-                        <a class="app-nav-item" [class.active]="currentView === 'chat'"
-                            (click)="setView('chat'); $event.preventDefault()">
-                            <span class="app-dot"></span>
-                            Decision Chat
-                        </a>
-                    </nav>
-                </div>
+  <section class="toast-stack" aria-live="polite" aria-label="Notifications">
+    <article
+      class="toast"
+      *ngFor="let notification of notifications"
+      [class.toast-success]="notification.type === 'success'"
+      [class.toast-error]="notification.type === 'error'"
+      [class.toast-info]="notification.type === 'info'"
+      (click)="dismissNotification(notification.id)"
+    >
+      {{ notification.message }}
+    </article>
+  </section>
 
-                <div class="app-sidebar-section">
-                    <div class="app-sidebar-title">Navigation</div>
-                    <nav class="app-nav">
-                        <a class="app-nav-item" [class.active]="currentView === 'inbox'"
-                            (click)="setView('inbox'); $event.preventDefault()">
-                            <span class="app-dot"></span>
-                            Decision Inbox
-                        </a>
-                        <a class="app-nav-item" [class.active]="currentView === 'kanban'"
-                            (click)="setView('kanban'); $event.preventDefault()">
-                            <span class="app-dot"></span>
-                            Kanban Board
-                        </a>
-                        <a class="app-nav-item" [class.active]="currentView === 'sprints'"
-                            (click)="setView('sprints'); $event.preventDefault()">
-                            <span class="app-dot"></span>
-                            Sprints
-                        </a>
-                        <a class="app-nav-item" [class.active]="currentView === 'automations'"
-                            (click)="setView('automations'); $event.preventDefault()">
-                            <span class="app-dot"></span>
-                            Automations
-                        </a>
-                        <a class="app-nav-item" [class.active]="currentView === 'integrations'"
-                            (click)="setView('integrations'); $event.preventDefault()">
-                            <span class="app-dot"></span>
-                            Integrations
-                        </a>
-                        <a class="app-nav-item" [class.active]="currentView === 'reports'"
-                            (click)="setView('reports'); $event.preventDefault()">
-                            <span class="app-dot"></span>
-                            Reports
-                        </a>
-                        <a class="app-nav-item" [class.active]="currentView === 'settings'"
-                            (click)="setView('settings'); $event.preventDefault()">
-                            <span class="app-dot"></span>
-                            Settings
-                        </a>
-                    </nav>
-                </div>
+  <div class="modal-overlay" *ngIf="showNewDecisionModal" (click)="closeNewDecisionModal()">
+    <section
+      #newDecisionModal
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="new-decision-title"
+      (click)="$event.stopPropagation()"
+      (keydown)="onNewDecisionModalKeydown($event)"
+    >
+      <header class="modal-head">
+        <h2 id="new-decision-title">New Decision</h2>
+        <button type="button" class="icon-btn" aria-label="Close modal" (click)="closeNewDecisionModal()">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </header>
 
-                <div class="app-sidebar-section">
-                    <div class="app-sidebar-title">Monitoring</div>
-                    <div class="app-alert">
-                        <div class="app-alert-head">Churn Risk Spike</div>
-                        <div class="app-alert-body">3 enterprise accounts flagged in the last 24h.</div>
-                        <button class="app-alert-cta">Review Now</button>
-                    </div>
-                </div>
-
-                <div class="app-sidebar-section">
-                    <div class="app-sidebar-title">Status</div>
-                    <div class="app-status">
-                        <span class="app-status-dot"></span>
-                        System compiling signals
-                    </div>
-                </div>
-            </aside>
-
-            <main class="app-main">
-                <section class="app-chat-section" *ngIf="currentView === 'chat' || currentView === 'inbox'">
-                    <div class="app-card app-chat-card app-chat-card-wide">
-                        <!-- Sidebar: Context Panel -->
-                        <div class="app-context-panel">
-                            <div class="app-context-header">
-                                <div>
-                                    <div class="app-context-title">Context</div>
-                                    <div class="app-context-subtitle">Attach signals from any channel. Sentinent will
-                                        cite them in responses.</div>
-                                </div>
-                                <div class="app-context-actions">
-                                    <span class="app-context-count">{{ contextItems.length }} sources</span>
-                                    <span class="app-context-llm">Ollama · {{ llmModel }}</span>
-                                    <span class="app-chip">Auto-link on</span>
-                                </div>
-                            </div>
-
-                            <div class="app-context-form">
-                                <select class="app-context-select" #contextChannel>
-                                    <option value="Slack">Slack</option>
-                                    <option value="Intercom">Intercom</option>
-                                    <option value="Jira">Jira</option>
-                                    <option value="Gong">Gong</option>
-                                    <option value="Notion">Notion</option>
-                                    <option value="Email">Email</option>
-                                    <option value="Docs">Docs</option>
-                                </select>
-                                <input class="app-context-input" type="text" placeholder="Short label (optional)"
-                                    #contextTitle />
-                                <textarea class="app-context-textarea" rows="2"
-                                    placeholder="Paste context, links, or customer quotes..." #contextNote></textarea>
-                                <button class="app-pill app-context-cta"
-                                    (click)="addContext(contextChannel, contextTitle, contextNote)">Attach
-                                    context</button>
-                            </div>
-
-                            <div class="app-context-list">
-                                <div class="app-context-item" *ngFor="let item of contextItems; let i = index">
-                                    <div class="app-context-source">{{ item.source }}</div>
-                                    <div class="app-context-body">
-                                        <div class="app-context-item-title">{{ item.title }}</div>
-                                        <div class="app-context-item-summary">{{ item.summary }}</div>
-                                    </div>
-                                    <div class="app-context-meta">
-                                        <span class="app-context-time">{{ item.time }}</span>
-                                        <button class="app-icon-btn app-context-remove" aria-label="Remove context"
-                                            (click)="removeContext(i)">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                                                stroke="currentColor" stroke-width="2">
-                                                <path d="M18 6L6 18M6 6l12 12"></path>
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Main Chat Area -->
-                        <div class="app-chat-main">
-                            <div class="app-card-header">
-                                <div>
-                                    <div class="app-card-title">Decision Chat</div>
-                                    <div class="app-card-subtitle">Ask Sentinent. Get a decision-ready answer.</div>
-                                </div>
-                                <span class="app-badge">Live</span>
-                            </div>
-
-                            <div class="app-chat-messages">
-                                <div class="app-chat-row" *ngFor="let message of chatMessages"
-                                    [class.app-chat-row-user]="message.role === 'user'">
-                                    <div class="app-chat-avatar">
-                                        <span>{{ message.role === 'user' ? 'YOU' : 'SNT' }}</span>
-                                    </div>
-                                    <div class="app-chat-bubble">
-                                        <div class="app-chat-meta">
-                                            <span class="app-chat-name">{{ message.name }}</span>
-                                            <span class="app-chat-time">{{ message.time }}</span>
-                                        </div>
-                                        <div class="app-chat-text">{{ message.content }}</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="app-chat-suggestions">
-                                <button class="app-chip" *ngFor="let suggestion of chatSuggestions"
-                                    (click)="useSuggestion(suggestion)">
-                                    {{ suggestion }}
-                                </button>
-                                <button class="app-chip app-chip-secondary" (click)="clearChat()"
-                                    *ngIf="chatMessages.length > 0">Clear Chat</button>
-                                <button class="app-chip app-chip-secondary" (click)="exportChat()"
-                                    *ngIf="chatMessages.length > 0">Export</button>
-                            </div>
-
-                            <div class="app-chat-input">
-                                <input type="text" placeholder="Ask Sentinent what to build next..."
-                                    [(ngModel)]="chatInput" (keydown.enter)="sendChat()" [disabled]="chatIsLoading" />
-                                <button class="app-icon-btn" aria-label="Send message" (click)="sendChat()"
-                                    [disabled]="chatIsLoading">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
-                                    </svg>
-                                </button>
-                            </div>
-                            <div class="app-chat-status" *ngIf="chatIsLoading || chatError">
-                                <span *ngIf="chatIsLoading">Thinking…</span>
-                                <span *ngIf="chatError">{{ chatError }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="app-summary-row" *ngIf="currentView === 'inbox'">
-                    <div class="app-summary-chip" *ngFor="let kpi of kpis">
-                        <div class="app-summary-label">{{ kpi.label }}</div>
-                        <div class="app-summary-value">{{ kpi.value }}</div>
-                        <div class="app-summary-change">{{ kpi.change }}</div>
-                    </div>
-                </section>
-
-                <section class="app-secondary-grid" *ngIf="currentView === 'inbox'">
-                    <div class="app-column">
-                        <div class="app-card">
-                            <div class="app-card-header">
-                                <div>
-                                    <div class="app-card-title">Decision Inbox</div>
-                                    <div class="app-card-subtitle">Highest impact decisions awaiting action.</div>
-                                </div>
-                                <button class="app-chip">Priority: High</button>
-                            </div>
-                            <div class="app-decision-list">
-                                <div class="app-decision" *ngFor="let item of decisionQueue">
-                                    <div class="app-decision-main">
-                                        <div class="app-decision-title">{{ item.title }}</div>
-                                        <div class="app-decision-meta">
-                                            <span>{{ item.owner }}</span>
-                                            <span class="app-divider"></span>
-                                            <span>Confidence {{ item.confidence }}%</span>
-                                            <span class="app-divider"></span>
-                                            <span>{{ item.impact }}</span>
-                                        </div>
-                                    </div>
-                                    <div class="app-decision-side">
-                                        <span class="app-status-pill">{{ item.status }}</span>
-                                        <div class="app-decision-risk">{{ item.risk }}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="app-card">
-                            <div class="app-card-header">
-                                <div>
-                                    <div class="app-card-title">Live Signal Stream</div>
-                                    <div class="app-card-subtitle">Incoming context and customer evidence.</div>
-                                </div>
-                                <button class="app-chip">Auto-tagging on</button>
-                            </div>
-                            <div class="app-signal-list">
-                                <div class="app-signal" *ngFor="let signal of signalStream">
-                                    <div class="app-signal-source">{{ signal.source }}</div>
-                                    <div class="app-signal-summary">{{ signal.summary }}</div>
-                                    <div class="app-signal-time">{{ signal.time }}</div>
-                                </div>
-                            </div>
-                            <div class="app-signal-footer">
-                                <span>Signals normalized: 98%</span>
-                                <button class="app-link">Open Signal Graph</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="app-column">
-                        <div class="app-card app-decision-detail">
-                            <div class="app-card-header">
-                                <div>
-                                    <div class="app-card-title">Decision Object</div>
-                                    <div class="app-card-subtitle">{{ decisionDetail.title }}</div>
-                                </div>
-                                <span class="app-status-pill">{{ decisionDetail.status }}</span>
-                            </div>
-                            <div class="app-decision-detail-grid">
-                                <div class="app-decision-block">
-                                    <div class="app-decision-label">Problem</div>
-                                    <div class="app-decision-text">{{ decisionDetail.problem }}</div>
-                                </div>
-                                <div class="app-decision-block">
-                                    <div class="app-decision-label">Evidence</div>
-                                    <div class="app-decision-text">{{ decisionDetail.evidence }}</div>
-                                </div>
-                                <div class="app-decision-block">
-                                    <div class="app-decision-label">Tradeoff</div>
-                                    <div class="app-decision-text">{{ decisionDetail.tradeoff }}</div>
-                                </div>
-                            </div>
-                            <div class="app-decision-options">
-                                <div class="app-decision-option" *ngFor="let option of decisionOptions">
-                                    <div class="app-decision-option-title">{{ option.title }}</div>
-                                    <div class="app-decision-option-meta">{{ option.detail }}</div>
-                                </div>
-                            </div>
-                            <div class="app-decision-footer">
-                                <span>Owner: {{ decisionDetail.owner }}</span>
-                                <span>Confidence {{ decisionDetail.confidence }}%</span>
-                                <span>Impact {{ decisionDetail.impact }}</span>
-                            </div>
-                        </div>
-
-                        <div class="app-card app-context-card">
-                            <div class="app-card-header">
-                                <div>
-                                    <div class="app-card-title">Evidence Map</div>
-                                    <div class="app-card-subtitle">Active signals tied to this decision.</div>
-                                </div>
-                                <button class="app-chip">{{ contextItems.length }} sources</button>
-                            </div>
-                            <div class="app-context-list">
-                                <div class="app-context-item" *ngFor="let item of contextItems">
-                                    <div class="app-context-source">{{ item.source }}</div>
-                                    <div class="app-context-body">
-                                        <div class="app-context-item-title">{{ item.title }}</div>
-                                        <div class="app-context-item-summary">{{ item.summary }}</div>
-                                    </div>
-                                    <div class="app-context-meta">
-                                        <span class="app-context-time">{{ item.time }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="app-card" *ngFor="let insight of insightCards">
-                            <div class="app-card-header">
-                                <div>
-                                    <div class="app-card-title">{{ insight.title }}</div>
-                                    <div class="app-card-subtitle">{{ insight.note }}</div>
-                                </div>
-                                <span class="app-badge">{{ insight.badge }}</span>
-                            </div>
-                            <div class="app-insight-value">{{ insight.value }}</div>
-                            <div class="app-insight-chart">
-                                <div class="app-bar app-bar-1"></div>
-                                <div class="app-bar app-bar-2"></div>
-                                <div class="app-bar app-bar-3"></div>
-                                <div class="app-bar app-bar-4"></div>
-                                <div class="app-bar app-bar-5"></div>
-                            </div>
-                        </div>
-
-                        <div class="app-card app-card-highlight">
-                            <div class="app-card-header">
-                                <div>
-                                    <div class="app-card-title">Decision Builder</div>
-                                    <div class="app-card-subtitle">Draft a new object with guided prompts.</div>
-                                </div>
-                                <button class="app-chip">AI Assist</button>
-                            </div>
-                            <div class="app-builder">
-                                <div class="app-builder-row">
-                                    <span class="app-builder-label">Problem</span>
-                                    <span class="app-builder-value">Dashboard latency in Enterprise tier</span>
-                                </div>
-                                <div class="app-builder-row">
-                                    <span class="app-builder-label">Evidence</span>
-                                    <span class="app-builder-value">12 tickets, 3 calls, 1 churn event</span>
-                                </div>
-                                <div class="app-builder-row">
-                                    <span class="app-builder-label">Options</span>
-                                    <span class="app-builder-value">Increase cache + batch requests</span>
-                                </div>
-                                <div class="app-builder-row">
-                                    <span class="app-builder-label">Tradeoff</span>
-                                    <span class="app-builder-value">Higher infra spend through Q4</span>
-                                </div>
-                            </div>
-                            <div class="app-builder-actions">
-                                <button class="app-pill">Generate Draft</button>
-                                <button class="app-link">Open editor</button>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="app-card app-timeline app-bottom-row" *ngIf="currentView === 'inbox'">
-                    <div class="app-card-header">
-                        <div>
-                            <div class="app-card-title">Decision Timeline</div>
-                            <div class="app-card-subtitle">Latest approvals and outcomes.</div>
-                        </div>
-                        <button class="app-chip">Last 7 days</button>
-                    </div>
-                    <div class="app-timeline-grid">
-                        <div class="app-timeline-item">
-                            <div class="app-timeline-dot"></div>
-                            <div>
-                                <div class="app-timeline-title">Board Packet generated</div>
-                                <div class="app-timeline-meta">Outcome ledger exported to PDF</div>
-                            </div>
-                            <span class="app-timeline-time">2h ago</span>
-                        </div>
-                        <div class="app-timeline-item">
-                            <div class="app-timeline-dot"></div>
-                            <div>
-                                <div class="app-timeline-title">Decision approved: API Limits</div>
-                                <div class="app-timeline-meta">Risk accepted by S. Chen</div>
-                            </div>
-                            <span class="app-timeline-time">5h ago</span>
-                        </div>
-                        <div class="app-timeline-item">
-                            <div class="app-timeline-dot"></div>
-                            <div>
-                                <div class="app-timeline-title">Bias alert: recency spike</div>
-                                <div class="app-timeline-meta">3 decisions flagged for review</div>
-                            </div>
-                            <span class="app-timeline-time">1d ago</span>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="app-view" *ngIf="currentView === 'kanban'">
-                    <div class="app-card">
-                        <div class="app-card-header">
-                            <div>
-                                <div class="app-card-title">Kanban Board</div>
-                                <div class="app-card-subtitle">Live workstream across product and engineering.</div>
-                            </div>
-                            <button class="app-chip">WIP Limit 3</button>
-                        </div>
-                        <div class="app-kanban">
-                            <div class="app-kanban-column" *ngFor="let column of kanbanColumns"
-                                [class.app-kanban-column-dragover]="dragOverColumn === column.title"
-                                (dragover)="onDragOver($event, column.title)" (dragleave)="onDragLeave()"
-                                (drop)="onDrop($event, column.title)">
-                                <div class="app-kanban-title">{{ column.title }} <span class="app-kanban-count">{{
-                                        column.items.length }}</span></div>
-                                <div class="app-kanban-card" *ngFor="let item of column.items" draggable="true"
-                                    (dragstart)="onDragStart($event, item, column.title)">
-                                    <div class="app-kanban-card-title">{{ item.title }}</div>
-                                    <div class="app-kanban-card-meta">
-                                        <span class="app-tag">{{ item.tag }}</span>
-                                        <span class="app-priority">{{ item.priority }}</span>
-                                        <span class="app-assignee">{{ item.assignee }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="app-view" *ngIf="currentView === 'sprints'">
-                    <div class="app-sprint-grid">
-                        <div class="app-card">
-                            <div class="app-card-title">{{ sprintOverview.name }}</div>
-                            <div class="app-card-subtitle">{{ sprintOverview.goal }}</div>
-                            <div class="app-sprint-metrics">
-                                <div>
-                                    <div class="app-sprint-label">Velocity</div>
-                                    <div class="app-sprint-value">{{ sprintOverview.velocity }}</div>
-                                </div>
-                                <div>
-                                    <div class="app-sprint-label">Health</div>
-                                    <div class="app-sprint-value">{{ sprintOverview.health }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="app-card">
-                            <div class="app-card-title">Burndown</div>
-                            <div class="app-card-subtitle">Projected vs actual completion.</div>
-                            <div class="app-burndown">
-                                <span></span><span></span><span></span><span></span><span></span><span></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="app-card">
-                        <div class="app-card-header">
-                            <div>
-                                <div class="app-card-title">Sprint Backlog</div>
-                                <div class="app-card-subtitle">Scope for the current sprint.</div>
-                            </div>
-                            <button class="app-chip">42 pts</button>
-                        </div>
-                        <div class="app-sprint-list">
-                            <div class="app-sprint-item" *ngFor="let item of sprintBacklog">
-                                <div>
-                                    <div class="app-sprint-item-title">{{ item.title }}</div>
-                                    <div class="app-sprint-item-meta">{{ item.owner }} · {{ item.points }} pts</div>
-                                </div>
-                                <span class="app-status-pill">{{ item.status }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="app-view" *ngIf="currentView === 'automations'">
-                    <div class="app-card">
-                        <div class="app-card-header">
-                            <div>
-                                <div class="app-card-title">Automation Rules</div>
-                                <div class="app-card-subtitle">Trigger actions from signals and decisions.</div>
-                            </div>
-                            <button class="app-pill">New Rule</button>
-                        </div>
-                        <div class="app-automation-list">
-                            <div class="app-automation-item" *ngFor="let rule of automationRules; let i = index">
-                                <div>
-                                    <div class="app-automation-title">{{ rule.title }}</div>
-                                    <div class="app-automation-meta">Trigger: {{ rule.trigger }}</div>
-                                    <div class="app-automation-meta">Action: {{ rule.action }}</div>
-                                </div>
-                                <button class="app-toggle" [class.on]="rule.status === 'On'"
-                                    (click)="toggleAutomation(i)">{{ rule.status }}</button>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="app-view" *ngIf="currentView === 'integrations'">
-                    <div class="app-card">
-                        <div class="app-card-header">
-                            <div>
-                                <div class="app-card-title">Integrations</div>
-                                <div class="app-card-subtitle">Connect sources to enrich decision context.</div>
-                            </div>
-                            <button class="app-chip">6 Connected</button>
-                        </div>
-                        <div class="app-integrations-grid">
-                            <div class="app-integration-card" *ngFor="let integration of integrations">
-                                <div class="app-integration-name">{{ integration.name }}</div>
-                                <div class="app-integration-detail">{{ integration.detail }}</div>
-                                <span class="app-status-pill">{{ integration.status }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="app-view" *ngIf="currentView === 'reports'">
-                    <div class="app-reports-grid">
-                        <div class="app-card" *ngFor="let report of reports">
-                            <div class="app-card-title">{{ report.title }}</div>
-                            <div class="app-report-value">{{ report.value }}</div>
-                            <div class="app-report-change">{{ report.change }}</div>
-                            <div class="app-report-chart">
-                                <span></span><span></span><span></span><span></span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="app-view" *ngIf="currentView === 'settings'">
-                    <div class="app-card">
-                        <div class="app-card-header">
-                            <div>
-                                <div class="app-card-title">Organization Settings</div>
-                                <div class="app-card-subtitle">Configure AI, automation, and reporting.</div>
-                            </div>
-                            <button class="app-chip">Admin</button>
-                        </div>
-                        <div class="app-settings-list">
-                            <div class="app-setting" *ngFor="let item of settings; let i = index">
-                                <div>
-                                    <div class="app-setting-title">{{ item.title }}</div>
-                                    <div class="app-setting-desc">{{ item.description }}</div>
-                                </div>
-                                <button class="app-toggle" [class.on]="item.enabled" (click)="toggleSetting(i)">{{
-                                    item.enabled ? 'On' : 'Off' }}</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="app-card" style="margin-top: 24px;">
-                        <div class="app-card-header">
-                            <div>
-                                <div class="app-card-title">Integrate Channels</div>
-                                <div class="app-card-subtitle">Connect communication sources for real-time signals.
-                                </div>
-                            </div>
-                            <button class="app-chip">Add New</button>
-                        </div>
-                        <div class="app-settings-list">
-                            <div class="app-setting" *ngFor="let item of integrations; let i = index">
-                                <div>
-                                    <div class="app-setting-title">{{ item.name }}</div>
-                                    <div class="app-setting-desc">{{ item.detail }}</div>
-                                </div>
-                                <button class="app-toggle" [class.on]="item.status === 'Connected'"
-                                    (click)="toggleIntegration(i)">{{ item.status === 'Connected' ? 'Connected' :
-                                    'Connect'
-                                    }}</button>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-            </main>
+      <div class="modal-body">
+        <div class="field">
+          <label for="decision-title">Title *</label>
+          <input #newDecisionTitleInput id="decision-title" class="input" type="text" [(ngModel)]="newDecision.title" />
         </div>
-    </div>
 
-    <!-- Notification Toasts -->
-    <div class="app-notifications">
-        <div class="app-toast" *ngFor="let notif of notifications; let i = index" [ngClass]="'app-toast-' + notif.type"
-            (click)="dismissNotification(i)">
-            <span class="app-toast-icon">
-                <svg *ngIf="notif.type === 'success'" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2">
-                    <path d="M20 6L9 17l-5-5" />
-                </svg>
-                <svg *ngIf="notif.type === 'error'" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M15 9l-6 6M9 9l6 6" />
-                </svg>
-                <svg *ngIf="notif.type === 'info'" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 16v-4M12 8h.01" />
-                </svg>
-            </span>
-            <span class="app-toast-message">{{ notif.message }}</span>
-            <button class="app-toast-close" aria-label="Dismiss">×</button>
+        <div class="field">
+          <label for="decision-problem">Problem Statement *</label>
+          <textarea id="decision-problem" class="input textarea" rows="2" [(ngModel)]="newDecision.problem"></textarea>
         </div>
-    </div>
 
-    <!-- New Decision Modal -->
-    <div class="app-modal-overlay" *ngIf="showNewDecisionModal" (click)="closeNewDecisionModal()">
-        <div class="app-modal" (click)="$event.stopPropagation()">
-            <div class="app-modal-header">
-                <h2 class="app-modal-title">New Decision</h2>
-                <button class="app-icon-btn" (click)="closeNewDecisionModal()" aria-label="Close modal">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-            <div class="app-modal-body">
-                <div class="app-form-group">
-                    <label class="app-label">Decision Title *</label>
-                    <input type="text" class="app-input" placeholder="e.g., Increase API Rate Limits"
-                        [(ngModel)]="newDecision.title" />
-                </div>
-                <div class="app-form-group">
-                    <label class="app-label">Problem Statement</label>
-                    <textarea class="app-textarea" rows="2" placeholder="What problem are we solving?"
-                        [(ngModel)]="newDecision.problem"></textarea>
-                </div>
-                <div class="app-form-group">
-                    <label class="app-label">Evidence</label>
-                    <textarea class="app-textarea" rows="2" placeholder="What data supports this decision?"
-                        [(ngModel)]="newDecision.evidence"></textarea>
-                </div>
-                <div class="app-form-group">
-                    <label class="app-label">Options</label>
-                    <div class="app-option-list">
-                        <div class="app-option-row" *ngFor="let opt of newDecision.options; let i = index; trackBy: i">
-                            <input type="text" class="app-input" [placeholder]="'Option ' + (i + 1)"
-                                [(ngModel)]="newDecision.options[i]" />
-                            <button class="app-icon-btn" (click)="removeOption(i)"
-                                *ngIf="newDecision.options.length > 1" aria-label="Remove option">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
-                                    <path d="M18 6L6 18M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                    <button class="app-link" (click)="addOption()">+ Add Option</button>
-                </div>
-                <div class="app-form-row">
-                    <div class="app-form-group app-form-half">
-                        <label class="app-label">Owner</label>
-                        <input type="text" class="app-input" placeholder="e.g., S. Chen"
-                            [(ngModel)]="newDecision.owner" />
-                    </div>
-                    <div class="app-form-group app-form-half">
-                        <label class="app-label">Impact</label>
-                        <input type="text" class="app-input" placeholder="e.g., +$2M ARR"
-                            [(ngModel)]="newDecision.impact" />
-                    </div>
-                </div>
-                <div class="app-form-group">
-                    <label class="app-label">Tradeoff / Risk</label>
-                    <input type="text" class="app-input" placeholder="e.g., +$400k infra cost per quarter"
-                        [(ngModel)]="newDecision.tradeoff" />
-                </div>
-                <div class="app-form-group">
-                    <label class="app-label">Confidence: {{ newDecision.confidence }}%</label>
-                    <input type="range" min="0" max="100" class="app-range" [(ngModel)]="newDecision.confidence" />
-                </div>
-            </div>
-            <div class="app-modal-footer">
-                <button class="app-chip app-chip-secondary" (click)="closeNewDecisionModal()">Cancel</button>
-                <button class="app-pill" (click)="saveNewDecision()">Create Decision</button>
-            </div>
+        <div class="field">
+          <label for="decision-evidence">Evidence *</label>
+          <textarea id="decision-evidence" class="input textarea" rows="2" [(ngModel)]="newDecision.evidence"></textarea>
         </div>
-    </div>
 
-    <!-- Command Palette -->
-    <div class="app-cmd-overlay" *ngIf="showCommandPalette" (click)="closeCommandPalette()">
-        <div class="app-cmd-palette" (click)="$event.stopPropagation()">
-            <div class="app-cmd-header">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <path d="M21 21l-4.35-4.35"></path>
-                </svg>
-                <input type="text" class="app-cmd-input" placeholder="Type a command..." [(ngModel)]="commandQuery"
-                    (input)="updateCommandResults()" autofocus />
-                <span class="app-kbd">ESC</span>
-            </div>
-            <div class="app-cmd-results">
-                <div class="app-cmd-item" *ngFor="let cmd of commandResults; let i = index"
-                    [class.app-cmd-item-selected]="i === selectedCommandIndex" (click)="executeCommand(i)"
-                    (mouseenter)="selectedCommandIndex = i">
-                    <span class="app-cmd-icon">{{ cmd.icon }}</span>
-                    <span class="app-cmd-label">{{ cmd.label }}</span>
-                </div>
-                <div class="app-cmd-empty" *ngIf="commandResults.length === 0">
-                    No commands found
-                </div>
-            </div>
-            <div class="app-cmd-footer">
-                <span><kbd>↑↓</kbd> Navigate</span>
-                <span><kbd>Enter</kbd> Select</span>
-                <span><kbd>Esc</kbd> Close</span>
-            </div>
+        <div class="field">
+          <label>Options *</label>
+          <div class="option-input-row" *ngFor="let option of newDecision.options; let i = index">
+            <input class="input" type="text" [(ngModel)]="newDecision.options[i]" [placeholder]="'Option ' + (i + 1)" />
+            <button type="button" class="icon-btn" (click)="removeNewOption(i)" aria-label="Remove option">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </div>
+          <button type="button" class="chip-btn ghost" (click)="addNewOption()">+ Add Option</button>
         </div>
-    </div>
 
-    <!-- Archive Modal -->
-    <div class="app-modal-overlay" *ngIf="showArchiveModal" (click)="showArchiveModal = false">
-        <div class="app-modal" (click)="$event.stopPropagation()">
-            <div class="app-modal-header">
-                <h2 class="app-modal-title">Decision Archive</h2>
-                <button class="app-icon-btn" (click)="showArchiveModal = false" aria-label="Close">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-            <div class="app-modal-body">
-                <div class="app-archive-list" *ngIf="archivedDecisions.length > 0">
-                    <div class="app-archive-item" *ngFor="let decision of archivedDecisions; let i = index">
-                        <div class="app-archive-info">
-                            <div class="app-archive-title">{{ decision.title }}</div>
-                            <div class="app-archive-meta">Archived {{ decision.archivedAt | date:'short' }}</div>
-                        </div>
-                        <button class="app-chip" (click)="restoreDecision(i)">Restore</button>
-                    </div>
-                </div>
-                <div class="app-empty-state" *ngIf="archivedDecisions.length === 0">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="1.5">
-                        <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4" />
-                    </svg>
-                    <p>No archived decisions yet</p>
-                </div>
-            </div>
+        <div class="two-col">
+          <div class="field">
+            <label for="decision-owner">Owner *</label>
+            <input id="decision-owner" class="input" type="text" [(ngModel)]="newDecision.owner" />
+          </div>
+          <div class="field">
+            <label for="decision-impact">Impact *</label>
+            <input id="decision-impact" class="input" type="text" [(ngModel)]="newDecision.impact" placeholder="e.g. +$2M ARR" />
+          </div>
         </div>
-    </div>
 
-    <!-- Loading Skeleton -->
-    <div class="app-loading-overlay" *ngIf="isLoading">
-        <div class="app-loading-content">
-            <div class="app-loading-spinner"></div>
-            <div class="app-loading-text">Loading Decision Studio...</div>
+        <div class="field">
+          <label for="decision-risk">Tradeoff / Risk</label>
+          <input id="decision-risk" class="input" type="text" [(ngModel)]="newDecision.tradeoff" />
         </div>
-    </div>
+
+        <div class="field">
+          <label for="decision-confidence">Confidence: {{ newDecision.confidence }}%</label>
+          <input id="decision-confidence" type="range" min="0" max="100" [(ngModel)]="newDecision.confidence" class="slider" />
+        </div>
+      </div>
+
+      <footer class="modal-footer">
+        <p class="error-text" *ngIf="!modalIsValid">Required fields are marked with *.</p>
+        <div class="modal-actions">
+          <button type="button" class="chip-btn ghost" (click)="closeNewDecisionModal()">Cancel</button>
+          <button type="button" class="primary-btn" [disabled]="!modalIsValid" (click)="saveNewDecision()">Create</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+
+  <div class="modal-overlay" *ngIf="showShortcutsModal" (click)="showShortcutsModal = false">
+    <section class="modal shortcuts-modal" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" (click)="$event.stopPropagation()">
+      <header class="modal-head">
+        <h2 id="shortcuts-title">Keyboard Shortcuts</h2>
+        <button type="button" class="icon-btn" aria-label="Close shortcuts" (click)="showShortcutsModal = false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </header>
+      <div class="modal-body">
+        <div class="shortcut-row"><span>Ctrl + K</span><span>Focus search</span></div>
+        <div class="shortcut-row"><span>Ctrl + 1</span><span>Go to Chat</span></div>
+        <div class="shortcut-row"><span>Ctrl + 2</span><span>Go to Inbox</span></div>
+        <div class="shortcut-row"><span>Ctrl + 3</span><span>Go to Agent Feature</span></div>
+        <div class="shortcut-row"><span>Ctrl + Enter</span><span>Send chat message</span></div>
+        <div class="shortcut-row"><span>Esc</span><span>Close modal/sidebar</span></div>
+        <div class="shortcut-row"><span>?</span><span>Open shortcuts</span></div>
+      </div>
+    </section>
+  </div>
 </div>
+

@@ -1,0 +1,104 @@
+<div class="operator-page">
+  <header class="operator-header">
+    <a routerLink="/app" class="operator-back">Back to App</a>
+    <h1>Sentinent Decision Operator</h1>
+    <p>Run Slack + competitor research workflows and generate structured product decisions.</p>
+    <div class="operator-health">
+      API status:
+      <strong [class]="statusTone(operatorHealth)">{{ operatorHealth }}</strong>
+    </div>
+  </header>
+
+  <div class="operator-notice" *ngIf="notice">{{ notice }}</div>
+  <div class="operator-error" *ngIf="error">{{ error }}</div>
+
+  <section class="operator-card">
+    <h2>Connections</h2>
+    <div class="operator-actions">
+      <button type="button" (click)="importSlackState()" [disabled]="importingSlack">
+        {{ importingSlack ? 'Importing Slack...' : 'Import Slack From Existing App' }}
+      </button>
+    </div>
+
+    <div class="jira-grid">
+      <label>
+        Jira Base URL
+        <input type="text" [(ngModel)]="jiraBaseUrl" placeholder="https://your-org.atlassian.net" />
+      </label>
+      <label>
+        Jira Session Cookie (optional)
+        <input type="text" [(ngModel)]="jiraSessionCookie" placeholder="paste session cookie" />
+      </label>
+    </div>
+    <button type="button" class="ghost" (click)="connectJira()" [disabled]="connectingJira">
+      {{ connectingJira ? 'Saving Jira...' : 'Save Jira Connection' }}
+    </button>
+  </section>
+
+  <section class="operator-card">
+    <h2>Start Decision Run</h2>
+    <div class="run-create-row">
+      <input type="text" [(ngModel)]="featureName" placeholder="Feature idea (e.g. Dark Mode)" />
+      <button type="button" (click)="createRun()" [disabled]="creatingRun">
+        {{ creatingRun ? 'Starting...' : 'New Decision Run' }}
+      </button>
+      <button type="button" class="ghost" (click)="refreshRuns()" [disabled]="loadingRuns">
+        {{ loadingRuns ? 'Refreshing...' : 'Refresh' }}
+      </button>
+    </div>
+  </section>
+
+  <section class="operator-grid">
+    <article class="operator-card">
+      <h3>Runs</h3>
+      <div class="runs-list" *ngIf="runs.length; else emptyRuns">
+        <button
+          type="button"
+          class="run-item"
+          *ngFor="let run of runs; trackBy: trackRun"
+          (click)="loadRun(run.id)"
+          [class.active]="selectedRun?.id === run.id"
+        >
+          <div class="run-head">
+            <strong>{{ run.feature_name }}</strong>
+            <span [class]="statusTone(run.status)">{{ run.status }}</span>
+          </div>
+          <div class="run-meta">{{ run.current_step || 'N/A' }}</div>
+          <div class="run-meta">{{ run.id }}</div>
+        </button>
+      </div>
+      <ng-template #emptyRuns>
+        <p>No decision runs yet.</p>
+      </ng-template>
+    </article>
+
+    <article class="operator-card">
+      <h3>Run Detail</h3>
+      <div *ngIf="selectedRun; else noRunSelected" class="detail-wrap">
+        <div class="detail-tags">
+          <span class="tag">{{ selectedRun.status }}</span>
+          <span class="tag">{{ selectedRun.current_step || 'N/A' }}</span>
+        </div>
+        <div class="operator-error" *ngIf="selectedRun.error">{{ selectedRun.error }}</div>
+
+        <h4>Slack Signals</h4>
+        <pre>{{ pretty(getArtifact('slack_signals')) }}</pre>
+
+        <h4>Competitor Scan</h4>
+        <pre>{{ pretty(getArtifact('competitor_scan')) }}</pre>
+
+        <h4>Decision Object</h4>
+        <pre>{{ pretty(getArtifact('decision_object')) }}</pre>
+
+        <h4>Jira Epic</h4>
+        <pre>{{ pretty(getArtifact('jira_epic')) }}</pre>
+
+        <h4>Run Logs</h4>
+        <pre>{{ pretty(runLogs) }}</pre>
+      </div>
+      <ng-template #noRunSelected>
+        <p>Select a run to view details.</p>
+      </ng-template>
+    </article>
+  </section>
+</div>
